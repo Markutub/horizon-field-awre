@@ -97,5 +97,8 @@ Status: pure-Java parts tested in the sandbox (core 61/61, stream 13/13); Paper 
 
 **Preview.** `tools/preview/TerrainPreview.java` renders the plan over synthetic terrain: `docs/img/lod-levels.png` (tinted by level with tile outlines: level 0 in the middle, rings of growing tiles outwards, no holes in the disc) and `docs/img/lod-terrain.png` (same terrain without tint; it is continuous across level boundaries, which is a visual check that tile addressing and reduction line up).
 
+## 7b. CI phases for captured mode (session 14)
+`tools/ci/integration.sh` now has three phases on the same Paper + Fabric setup: (1) synthetic terrain, fragmentation, palette, incompatible client (all green in the first real run); (2) `stream.source: captured` with a fresh disk cache: the client must receive tiles built from REAL chunks the server loaded (flat world around spawn), a palette from real block keys, `noData>0` (unobserved areas send nothing), zero failures and strikes, and `plugins/AWRE/terrain/<world>.hfl` must exist after shutdown; (3) restart: the log must say `terrain cache ...: restored N chunks`. UNVERIFIED until the first CI run with these phases; the first failure will most likely be in log wording or timing, not in the logic.
+
 ## 8. Not done (deliberately)
 Drawing the meshes (the mesher and cache exist; the Minecraft 1.21.11 render hook does not, it needs a Fabric build to develop against); compaction of the terrain log; incremental planner; delta/edit coding of tiles; calibrating kappa, hole/stale penalties, the byte budget and the real compression ratio on a real `.hfl`; Gradle/Loom/Paper builds.

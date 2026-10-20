@@ -1,6 +1,9 @@
 # HANDOFF — read this first (for the next AI / developer)
 
-## Session 13 addendum (LATEST)
+## Session 14 addendum (LATEST)
+First real CI run: build, smoke (after fixing the fabric-api version string: the action appends "+<mc>" itself) and integration all GREEN. Then added CI phases 2-3 (captured terrain, disk cache, restart replay) to `tools/ci/integration.sh`; see docs/AWRE_G1_FEATURES.md section 7b. These phases are not yet run. Next: read their result; then Fabric render hook (via CI iteration) or calibration on a real .hfl.
+
+## Session 13 addendum
 User: "continue building" (twice). Delivered (docs/AWRE_G1_FEATURES.md section 7): `TerrainPersistence` (TileLog reuse, restart + torn-tail + fingerprint tests) wired into `ChunkIngest` and Paper (`stream.persist`, `stream.import-horizon-cache`, async replay, 30 s flush); `TerrainMesher` + `BlockColors` (property-tested greedy mesher with skirts); `TileMeshCache`; `tools/preview/TerrainPreview.java` with images in docs/img. Sandbox: core 61/61, protocol 67/67, stream 13/13.
 Still source-only: awre-paper (incl. async persistence wiring), awre-fabric. Not started: the actual draw call in the Fabric client (needs 1.21.11 render APIs that cannot be checked offline).
 Next: user runs CI/builds and returns logs; then Fabric render hook using TileMeshCache, calibration on real data, log compaction.

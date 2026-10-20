@@ -85,6 +85,17 @@ run_client() { # run_client <name> <extra jvm args>
 }
 stop_client() { kill "$CLIENT_PID" 2>/dev/null; sleep 5; pkill -f "net.fabricmc" 2>/dev/null; CLIENT_PID=""; sleep 10; }
 
+start_server() { # start_server <log>
+  H server launch "server-paper-$MC" --jvm "-Xms512M -Xmx1G" > "$1" 2>&1 &
+  SERVER_PID=$!
+  wait_for "$1" 'Done \(' 300 || { tail -50 "$1"; die "server did not finish starting ($(basename "$1"))"; }
+}
+stop_server() { # stop_server <log>
+  pkill -TERM -f "$SERVER_DIR" 2>/dev/null
+  wait_for "$1" 'AWRE disabled' 90 || echo "server did not log plugin disable within 90 s ($(basename "$1"))"
+  kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; SERVER_PID=""; sleep 5
+}
+
 echo "== client A: compatible mod client"
 run_client clientA ""
 wait_for "$OUT/clientA.log" 'verified OK \(32768 decoded bytes\)' 420 || echo "client A: fragment marker not seen within timeout"
@@ -120,6 +131,49 @@ wait_for "$OUT/server.log" 'AWRE disabled' 90 || echo "server did not log plugin
 kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
 if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server.log"; then fail "AWRE-related exception in server log"; else pass "no AWRE exceptions in server log"; fi
 check "server stopped cleanly (plugin disabled)" "$OUT/server.log" 'AWRE disabled'
+
+# ---------------------------------------------------------------- phase 2: captured (real chunks) + persistence
+echo "== phase 2: captured terrain, fresh disk cache"
+rm -rf "$SERVER_DIR/plugins/AWRE/terrain"
+cat > "$SERVER_DIR/plugins/AWRE/config.yml" <<'YML'
+enabled: true
+auto-send-test-tile: false
+auto-fragment-test-side: 0
+debug: false
+stream:
+  enabled: true
+  source: captured
+  persist: true
+  import-horizon-cache: false
+  radius: 1000
+limits:
+  max-in-flight-tiles: 16
+  tile-burst: 64
+  tile-refill-per-sec: 500
+YML
+start_server "$OUT/server2.log"
+run_client clientC ""
+wait_for "$OUT/clientC.log" 'store tiles=[1-9][0-9]* ' 420 || echo "client C: captured tiles not seen within timeout"
+wait_for "$OUT/server2.log" 'stream [^:]+: leaves=[0-9]+ held=[1-9][0-9]* ' 120 || echo "server2: no stream line with held tiles"
+check "G1c capture started with persistence"         "$OUT/server2.log" "capturing loaded chunks of '.*' \\(OBSERVED, persisted\\)"
+check "G1c first start: fresh disk cache"            "$OUT/server2.log" "terrain cache for '.*': fresh"
+check "G1c client received captured tiles"           "$OUT/clientC.log" 'store tiles=[1-9][0-9]* '
+check "G1c client received a palette from real blocks" "$OUT/clientC.log" 'palette_entries=[1-9]'
+check "G1c unobserved areas send nothing (noData>0)" "$OUT/server2.log" 'stream [^:]+: .*noData=[1-9]'
+check "G1c no tile failures reported by the server"  "$OUT/server2.log" 'stream [^:]+: .*failures=0'
+check "G1c client strikes stayed 0"                  "$OUT/clientC.log" 'store tiles=[0-9]+ .*strikes=0'
+stop_client
+stop_server "$OUT/server2.log"
+if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server2.log"; then fail "AWRE-related exception in server2 log"; else pass "no AWRE exceptions in server2 log"; fi
+TERRAIN_FILE=$(find "$SERVER_DIR/plugins/AWRE/terrain" -name '*.hfl' 2>/dev/null | head -1)
+ls -la "$SERVER_DIR/plugins/AWRE/terrain" > "$OUT/terrain-dir.txt" 2>&1
+if [ -n "$TERRAIN_FILE" ] && [ "$(stat -c %s "$TERRAIN_FILE")" -gt 200 ]; then pass "G1c terrain cache file written ($(stat -c %s "$TERRAIN_FILE") bytes)"; else fail "G1c terrain cache file missing or empty"; fi
+
+echo "== phase 3: restart, cache must be replayed"
+start_server "$OUT/server3.log"
+wait_for "$OUT/server3.log" "terrain cache for '.*': restored" 120 || echo "server3: cache line not seen (it appears when the first chunk or player touches the world)"
+check "G1c restart restores chunks from disk"        "$OUT/server3.log" "terrain cache for '.*': restored [1-9][0-9]* chunks"
+stop_server "$OUT/server3.log"
 
 H debug > "$OUT/hmc-debug-end.txt" 2>&1 || true
 echo; cat "$OUT/summary.md"
