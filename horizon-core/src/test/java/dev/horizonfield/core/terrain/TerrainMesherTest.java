@@ -1,0 +1,102 @@
+package dev.horizonfield.core.terrain;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import dev.horizonfield.core.lod.LodKey;
+import dev.horizonfield.core.Confidence;
+import java.util.Random;
+import org.junit.jupiter.api.Test;
+
+class TerrainMesherTest {
+    private static LodTile tile(int lod, int tx, int tz, java.util.function.IntBinaryOperator top, java.util.function.IntBinaryOperator mat) {
+        short[] t = new short[256], m = new short[256];
+        for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) { int h = top.applyAsInt(x, z); t[z * 16 + x] = (short) h; m[z * 16 + x] = h == LodTile.NO_DATA ? 0 : (short) mat.applyAsInt(x, z); }
+        return new LodTile(new LodKey(lod, tx, tz), t, m, Confidence.OBSERVED);
+    }
+
+    private static final java.util.function.IntFunction<String> PAL = id -> id == 1 ? "minecraft:grass_block" : id == 2 ? "minecraft:stone" : "minecraft:sand";
+
+    private static void checkInvariants(LodTile t, TerrainMesher.Mesh m, double skirt) {
+        final double cell = 1 << t.key().lod(), ox = t.key().tx() * 16 * cell, oz = t.key().tz() * 16 * cell;
+        int valid = 0; double wall = 0; int boundary = 0;
+        for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+            if (t.topAt(x, z) == LodTile.NO_DATA) continue;
+            valid++;
+            int[][] nb = {{x, z - 1}, {x, z + 1}, {x - 1, z}, {x + 1, z}};
+            for (int[] q : nb) {
+                if (q[0] < 0 || q[1] < 0 || q[0] > 15 || q[1] > 15 || t.topAt(q[0], q[1]) == LodTile.NO_DATA) boundary++;
+                else if (t.topAt(q[0], q[1]) < t.topAt(x, z)) wall += (t.topAt(x, z) - t.topAt(q[0], q[1])) * cell;
+            }
+        }
+        double tol = 1e-3;
+        assertTrue(Math.abs(m.area(TerrainMesher.Face.UP) - valid * cell * cell) < tol, "top area " + m.area(TerrainMesher.Face.UP) + " vs " + valid * cell * cell);
+        double walls = 0;
+        for (TerrainMesher.Face f : new TerrainMesher.Face[]{TerrainMesher.Face.NORTH, TerrainMesher.Face.SOUTH, TerrainMesher.Face.WEST, TerrainMesher.Face.EAST}) walls += m.area(f);
+        assertTrue(Math.abs(walls - wall) < tol * Math.max(1, wall), "wall area " + walls + " vs " + wall);
+        assertTrue(Math.abs(m.area(TerrainMesher.Face.SKIRT) - boundary * cell * skirt) < tol, "skirt area");
+        assertEquals(m.indices.length / 3, m.triangleCount());
+        for (int i : m.indices) assertTrue(i >= 0 && i < m.vertexCount());
+        for (int v = 0; v < m.vertexCount(); v++) {
+            assertTrue(m.positions[v * 3] >= ox - 1e-4 && m.positions[v * 3] <= ox + 16 * cell + 1e-4, "x in tile");
+            assertTrue(m.positions[v * 3 + 2] >= oz - 1e-4 && m.positions[v * 3 + 2] <= oz + 16 * cell + 1e-4, "z in tile");
+        }
+        // winding: tops face up, walls face outwards
+        for (int tri = 0; tri < m.indices.length; tri += 3) {
+            double[] n = m.normal(tri);
+            double len = Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            assertTrue(len > 1e-9, "degenerate triangle");
+            switch (TerrainMesher.Face.values()[m.faces[m.indices[tri]]]) {
+                case UP -> assertTrue(n[1] / len > 0.999, "UP must face +y");
+                case NORTH -> assertTrue(n[2] / len < -0.999, "NORTH faces -z");
+                case SOUTH -> assertTrue(n[2] / len > 0.999, "SOUTH faces +z");
+                case WEST -> assertTrue(n[0] / len < -0.999, "WEST faces -x");
+                case EAST -> assertTrue(n[0] / len > 0.999, "EAST faces +x");
+                case SKIRT -> assertTrue(Math.abs(n[1]) / len < 1e-6, "skirts are vertical");
+            }
+        }
+    }
+
+    @Test void flatTileIsOneQuadPlusFourSkirts() {
+        LodTile t = tile(0, 3, -2, (x, z) -> 70, (x, z) -> 1);
+        TerrainMesher.Mesh m = TerrainMesher.mesh(t, PAL, 4);
+        assertEquals(5 * 2, m.triangleCount(), "1 merged top + 4 merged skirt strips");
+        checkInvariants(t, m, 4);
+    }
+
+    @Test void randomTerrainSatisfiesAreaAndWindingInvariantsAtEveryLevel() {
+        Random r = new Random(11);
+        for (int lod = 0; lod <= 5; lod++) {
+            for (int rep = 0; rep < 20; rep++) {
+                int[] h = new int[256], mt = new int[256];
+                for (int i = 0; i < 256; i++) { h[i] = r.nextInt(12) == 0 ? LodTile.NO_DATA : 60 + r.nextInt(5); mt[i] = 1 + r.nextInt(3); }
+                LodTile t = tile(lod, r.nextInt(9) - 4, r.nextInt(9) - 4, (x, z) -> h[z * 16 + x], (x, z) -> mt[z * 16 + x]);
+                checkInvariants(t, TerrainMesher.mesh(t, PAL, 2.0 * (1 << lod)), 2.0 * (1 << lod));
+            }
+        }
+    }
+
+    @Test void smoothSyntheticLikeTerrainMergesWellAndNoDataMakesNothing() {
+        LodTile ramp = tile(2, 0, 0, (x, z) -> 60 + x / 4, (x, z) -> 1);          // 4 plateaus of width 4
+        TerrainMesher.Mesh m = TerrainMesher.mesh(ramp, PAL, 8);
+        int upTris = 0;
+        for (int t = 0; t < m.indices.length; t += 3) if (m.faces[m.indices[t]] == TerrainMesher.Face.UP.ordinal()) upTris++;
+        assertEquals(8, upTris, "4 plateaus = 4 merged quads = 8 triangles");
+        assertTrue(Math.abs(m.area(TerrainMesher.Face.UP) - 256 * 16.0) < 1e-3);
+        assertTrue(m.triangleCount() < 60, "greedy merge should keep this tiny, got " + m.triangleCount());
+        LodTile empty = tile(0, 0, 0, (x, z) -> LodTile.NO_DATA, (x, z) -> 0);
+        assertEquals(0, TerrainMesher.mesh(empty, PAL, 4).triangleCount());
+    }
+
+    @Test void deterministicAndColoursComeFromThePalette() {
+        LodTile t = tile(0, 1, 1, (x, z) -> 64 + ((x * 7 + z * 3) % 3), (x, z) -> 1 + (x + z) % 3);
+        TerrainMesher.Mesh a = TerrainMesher.mesh(t, PAL, 4), b = TerrainMesher.mesh(t, PAL, 4);
+        assertArrayEquals(java.util.Arrays.toString(a.indices).getBytes(), java.util.Arrays.toString(b.indices).getBytes());
+        assertEquals(a.vertexCount(), b.vertexCount());
+        boolean sawGrass = false;
+        for (int c : a.colors) if (c == BlockColors.argb("minecraft:grass_block")) sawGrass = true;
+        assertTrue(sawGrass);
+        assertEquals(0, BlockColors.argb("minecraft:air"));
+        assertEquals(BlockColors.argb("mod:thing"), BlockColors.argb("mod:thing"));
+        assertTrue((BlockColors.argb("mod:thing") >>> 24) == 0xFF);
+    }
+}

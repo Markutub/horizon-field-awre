@@ -1,0 +1,9 @@
+K=385.6 px/block@1  ranges d_L (blocks): L1=193 L2=578 L3=1350 L4=2892 L5=5977 L6=12146
+R= 2000 leaves= 3304 (uniform LOD0 would need 49087, ratio 15x) plan ms=116.8  per level: L0=560 L1=1028 L2=1276 L3=440 L4=0 L5=0 L6=0
+R= 4000 leaves= 4648 (uniform LOD0 would need 196350, ratio 42x) plan ms=32.9  per level: L0=560 L1=1028 L2=1276 L3=1400 L4=384 L5=0 L6=0
+R= 8000 leaves= 6076 (uniform LOD0 would need 785398, ratio 129x) plan ms=33.4  per level: L0=560 L1=1028 L2=1276 L3=1400 L4=1456 L5=356 L6=0
+R=12000 leaves= 7080 (uniform LOD0 would need 1767146, ratio 250x) plan ms=51.7  per level: L0=560 L1=1028 L2=1276 L3=1400 L4=1456 L5=1360 L6=0
+speed 5.6 b/s hysteresis 0.00: 860 new leaves in 30 s (28.7/s)
+speed 5.6 b/s hysteresis 0.15: 358 new leaves in 30 s (11.9/s)
+speed 30.0 b/s hysteresis 0.00: 4688 new leaves in 30 s (156.3/s)
+speed 30.0 b/s hysteresis 0.15: 3380 new leaves in 30 s (112.7/s)

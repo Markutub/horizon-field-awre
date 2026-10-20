@@ -1,0 +1,16 @@
+name: AWRE
+version: '${version}'
+main: dev.awre.paper.AwrePlugin
+api-version: '1.21'
+description: AWRE G0 - versioned custom-payload protocol endpoint (handshake + one bounded test tile). Does not render or alter chunks.
+authors: [AWRE]
+load: POSTWORLD
+commands:
+  awre:
+    description: AWRE diagnostics
+    usage: /<command> status|stats|sendtest|fragtest [side]|lodplan [radius]|stream [on|off|status]|sendbad <kind>|debug [on|off]|reload
+    permission: awre.admin
+permissions:
+  awre.admin:
+    description: Use AWRE diagnostics and fault-injection commands
+    default: op

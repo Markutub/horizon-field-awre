@@ -1,0 +1,17 @@
+name: HorizonField
+version: '${version}'
+main: dev.horizonfield.paper.HorizonFieldPlugin
+api-version: '1.21'
+description: Server-side distant-terrain research scaffold (visibility-first terrain summaries).
+authors: [HorizonField]
+load: POSTWORLD
+commands:
+  horizon:
+    description: HorizonField diagnostics and experiments
+    usage: /<command> status|probe|sweep|flush
+    aliases: [hf]
+    permission: horizonfield.admin
+permissions:
+  horizonfield.admin:
+    description: Use HorizonField diagnostics and experiment commands
+    default: op

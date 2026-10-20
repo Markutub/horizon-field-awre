@@ -1,0 +1,118 @@
+# CI for Horizon Field / AWRE. UNVERIFIED: written without being able to run GitHub Actions or download any of the tools.
+# Jobs:  verify (pure Java, no downloads)  ->  build (Gradle: Paper + Fabric)  ->  smoke (MC-Runtime-Test)  and  integration (Paper server + Fabric client).
+# First failures are expected; every job uploads its logs. Bump pinned versions as noted.
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mc_version:
+        description: Minecraft version
+        default: "1.21.11"
+
+env:
+  MC_VERSION: ${{ inputs.mc_version || '1.21.11' }}
+  GRADLE_VERSION: "9.2.1"          # >= 9.1 (root) and = 9.2.1 (awre-fabric wrapper properties)
+  JAVA_VERSION: "21"               # 21 for MC 1.20.5 - 1.21.x
+
+jobs:
+  verify:
+    name: Pure-Java tests (no Gradle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - run: bash tools/verify-core.sh
+      - run: bash tools/verify-awre.sh
+      - run: bash tools/verify-stream.sh
+
+  build:
+    name: Build Paper plugins + Fabric mod
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Root build (horizon-core, horizon-paper, awre-protocol, awre-paper) with tests
+        run: gradle build -PjavaRelease=21 --stacktrace
+      - name: Fabric build (separate Loom build)
+        run: gradle -p awre-fabric build --stacktrace
+      - name: Collect jars
+        run: |
+          mkdir -p jars
+          cp awre-paper/build/libs/AWRE-Paper-*.jar jars/
+          cp horizon-paper/build/libs/HorizonField-*.jar jars/
+          cp awre-fabric/build/libs/awre-fabric-*[0-9].jar jars/      # skips the -sources jar
+          ls -l jars
+      - uses: actions/upload-artifact@v4
+        with: { name: jars, path: jars/*.jar, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gradle-reports
+          path: |
+            **/build/reports/tests
+            **/build/test-results
+          if-no-files-found: ignore
+
+  smoke:
+    name: Client smoke test (MC-Runtime-Test)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: actions/download-artifact@v4
+        with: { name: jars, path: jars }
+      - name: Stage mod for the test client
+        run: |
+          mkdir -p run/mods
+          cp jars/awre-fabric-*.jar run/mods/
+      - name: Launch client with the mod, join a world, quit
+        uses: headlesshq/mc-runtime-test@4.5.2     # newest tag: https://github.com/headlesshq/mc-runtime-test/releases
+        with:
+          mc: ${{ env.MC_VERSION }}
+          modloader: fabric
+          regex: .*fabric.*
+          mc-runtime-test: fabric
+          java: 21
+          fabric-api: "0.141.3+1.21.11"            # keep in step with awre-fabric/gradle.properties (fabric_version); drop the +mc suffix if the action rejects it
+
+  integration:
+    name: Paper server + Fabric client (headless)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: actions/download-artifact@v4
+        with: { name: jars, path: jars }
+      - name: Install HeadlessMc (official release, native Linux x64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HMC_TAG: ""                              # empty = latest; pin a tag for reproducible runs
+        run: |
+          mkdir -p "$HOME/bin"
+          gh release download ${HMC_TAG:+"$HMC_TAG"} --repo headlesshq/headlessmc --pattern 'headlessmc-launcher-linux-x64' --output "$HOME/bin/headlessmc"
+          chmod +x "$HOME/bin/headlessmc"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/headlessmc" --version
+      - name: Run integration (see tools/ci/integration.sh for the exact checks)
+        run: bash tools/ci/integration.sh jars
+      - name: Summary
+        if: always()
+        run: '[ -f ci-out/summary.md ] && cat ci-out/summary.md >> "$GITHUB_STEP_SUMMARY" || echo "no summary produced" >> "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: integration-logs, path: ci-out/, if-no-files-found: warn }

@@ -1,0 +1,108 @@
+file=/mnt/user-data/uploads/8e432d80-5a24-447c-9c32-63ec549ccd39.hfl tiles=4761 extent chunks x[-33..35] z[-32..36] MAXR=256 MINR=64 rings L0[64,128) L1[128,192) L2[192,256] budget scale=0.250
+valid viewpoint region: x[-272..320] z[-256..336]
+path row selection:
+   candidate row z=-256: mean |dh| per 4 blocks = 2.01
+   candidate row z=-108: mean |dh| per 4 blocks = 1.97
+   candidate row z=40: mean |dh| per 4 blocks = 0.68
+   candidate row z=188: mean |dh| per 4 blocks = 0.74
+   candidate row z=336: mean |dh| per 4 blocks = 0.85
+
+== REAL walk, low budget: speed=0.3 chunks/step, eye=ground+2, budget=1000 B/step (scaled), 120 steps, z=-256
+   sweep vs truth: false-occlusion = 0.00%, sweep set / truth set = 11.81x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first               689     105.4    41.8%      >120     28.2%     31.0%     0.00       0.0%       0.0%       171
+   S2 L0 sweep-ranked                689     105.4    41.8%      >120     28.2%     31.0%     0.00       0.0%       0.0%       171
+   S3 clipmap nearest                689     105.4    41.8%      >120     21.8%     22.9%     0.00       0.0%       0.0%       171
+   S4 clipmap sweep-ranked           689     105.4    41.8%      >120     21.8%     22.9%     0.00       0.0%       0.0%       171
+   S5 clipmap keep-until-repl.       689     105.4    41.8%      >120     28.2%     31.0%     0.00       0.0%       0.0%       171
+   S5h S5, band HB                   681     106.0    38.8%      >120     33.4%     40.9%     0.00       0.0%       0.0%       111
+   S6 S5h + level hysteresis         681     106.0    38.8%      >120     33.4%     40.9%     0.00       0.0%       0.0%       111
+
+== REAL walk, high budget: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step (scaled), 120 steps, z=-256
+   sweep vs truth: false-occlusion = 0.00%, sweep set / truth set = 11.81x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first              1842     298.9    23.5%        25     90.5%    100.0%     0.00       0.0%       0.0%       172
+   S2 L0 sweep-ranked               1843     298.8    23.5%        25     90.5%    100.0%     0.00       0.0%       0.0%       172
+   S3 clipmap nearest               1425     256.2    37.1%        11     92.4%     98.0%     1.11      64.4%      67.4%       254
+   S4 clipmap sweep-ranked          1425     256.2    37.1%        11     92.4%     98.0%     1.11      64.4%      67.4%       254
+   S5 clipmap keep-until-repl.      1425     256.2    37.1%        11     93.0%     98.7%     1.11      64.4%      67.4%       254
+   S5h S5, band HB                  1355     244.2    36.7%        11     93.4%     99.1%     1.06      67.0%      69.6%       184
+   S6 S5h + level hysteresis        1120     202.4    42.9%        10     93.6%     99.1%     1.49      59.8%      62.9%       180
+
+== REAL fast+elevated, 16 KB/step: speed=1.5 chunks/step, eye=ground+60, budget=4000 B/step (scaled), 25 steps, z=-256
+   sweep vs truth: false-occlusion = 0.01%, sweep set / truth set = 1.04x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first               626      94.9   100.0%       >25     20.7%     21.5%     0.00       0.0%       0.0%       148
+   S2 L0 sweep-ranked                626      94.9   100.0%       >25     20.7%     21.5%     0.00       0.0%       0.0%       148
+   S3 clipmap nearest                626      94.9   100.0%       >25     12.0%     10.6%     0.00       0.0%       0.0%       148
+   S4 clipmap sweep-ranked           626      94.9   100.0%       >25     12.0%     10.6%     0.00       0.0%       0.0%       148
+   S5 clipmap keep-until-repl.       626      94.9   100.0%       >25     20.7%     21.5%     0.00       0.0%       0.0%       148
+   S5h S5, band HB                   623      95.4   100.0%       >25     23.0%     25.3%     0.00       0.0%       0.0%       108
+   S6 S5h + level hysteresis         623      95.4   100.0%       >25     23.0%     25.3%     0.00       0.0%       0.0%       108
+
+== REAL fast+elevated, 64 KB/step: speed=1.5 chunks/step, eye=ground+60, budget=16000 B/step (scaled), 25 steps, z=-256
+   sweep vs truth: false-occlusion = 0.01%, sweep set / truth set = 1.04x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first              1836     297.8    94.8%         6     87.7%    100.0%     0.00       0.0%       0.0%       172
+   S2 L0 sweep-ranked               1836     297.8    94.8%         6     87.7%    100.0%     0.00       0.0%       0.0%       172
+   S3 clipmap nearest               1442     259.2    99.8%         3     90.7%     96.1%     1.25      64.2%      67.2%       256
+   S4 clipmap sweep-ranked          1442     259.2    99.8%         3     90.7%     96.1%     1.25      64.2%      67.2%       256
+   S5 clipmap keep-until-repl.      1442     259.2    99.8%         3     91.4%     96.9%     1.23      64.2%      67.2%       256
+   S5h S5, band HB                  1372     247.3    99.8%         3     91.9%     97.6%     1.19      66.8%      69.3%       186
+   S6 S5h + level hysteresis        1116     200.8   100.0%         3     91.9%     97.6%     1.51      59.5%      62.5%       168
+
+#### back-and-forth path (20 steps out, 20 back, 100 steps), S5h/S6 band HB=32 blocks ####
+
+== REAL back-and-forth, low budget: speed=0.3 chunks/step, eye=ground+2, budget=1000 B/step (scaled), 100 steps, z=-256
+   sweep vs truth: false-occlusion = 0.00%, sweep set / truth set = 4.84x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first               657      88.7    34.4%        99     43.8%     62.7%     0.00       0.0%       0.0%       106
+   S2 L0 sweep-ranked                657      88.7    34.4%        99     43.8%     62.7%     0.00       0.0%       0.0%       106
+   S3 clipmap nearest                651      87.4    33.9%      >100     32.1%     41.6%     0.34      34.6%      43.6%       324
+   S4 clipmap sweep-ranked           651      87.4    33.9%      >100     32.1%     41.6%     0.34      34.6%      43.6%       324
+   S5 clipmap keep-until-repl.       603      85.4    35.8%      >100     41.1%     57.1%     0.49      30.8%      39.9%       242
+   S5h S5, band HB                   568      86.3    39.6%        90     45.2%     64.8%     0.53      31.7%      39.8%       180
+   S6 S5h + level hysteresis         461      70.0    39.7%        60     62.1%     92.5%     1.02      19.3%      26.0%       108
+
+== REAL back-and-forth, high budget: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step (scaled), 100 steps, z=-256
+   sweep vs truth: false-occlusion = 0.00%, sweep set / truth set = 4.84x
+   strategy                        tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first              1446     216.1    22.2%        27     88.0%    100.0%     0.00       0.0%       0.0%       460
+   S2 L0 sweep-ranked               1446     216.0    22.0%        27     88.0%    100.0%     0.00       0.0%       0.0%       460
+   S3 clipmap nearest               1051     175.0    38.2%        10     93.0%     99.2%     1.06      54.6%      61.2%       593
+   S4 clipmap sweep-ranked          1051     175.0    38.2%        10     93.0%     99.2%     1.06      54.6%      61.2%       593
+   S5 clipmap keep-until-repl.      1051     175.0    38.2%        10     93.2%     99.4%     1.06      54.6%      61.2%       593
+   S5h S5, band HB                   867     148.4    42.2%        10     93.3%     99.5%     0.98      44.3%      48.9%       409
+   S6 S5h + level hysteresis         562      93.2    41.6%         9     93.4%     99.5%     1.15      32.0%      38.0%       210
+
+== REAL CULL study, walk, 4000 B/step, 120 steps (L0 nearest-first; candidates restricted to the last sweep's visible set)
+   variant                           tiles   KB sent  KB save      t90 cov(late)  cov(min)  holes/step
+   no culling (baseline)              1842     298.9        -       25    100.0%    100.0%         0.0
+   slack=8 sweep every 1 step         1838     298.3     0.2%       25    100.0%     99.7%         0.0
+   slack=8 sweep every 4 steps        1802     291.8     2.4%       25     98.4%     87.0%         3.1
+   slack=8 sweep every 10 steps       1750     283.6     5.1%       25     94.6%     68.3%         9.4
+   slack=32 sweep every 1 step        1842     298.9     0.0%       25    100.0%    100.0%         0.0
+   slack=32 sweep every 4 steps       1810     292.3     2.2%       25     98.4%     88.6%         3.0
+   slack=32 sweep every 10 steps      1762     284.8     4.7%       25     94.7%     69.1%         9.2
+   slack=8 PADDED, every 4 steps      1831     297.6     0.5%       25    100.0%    100.0%         0.0
+   slack=8 PADDED, every 10 steps     1832     298.0     0.3%       25    100.0%    100.0%         0.0
+
+== REAL CULL study, fast/elevated, 16000 B/step, 25 steps (L0 nearest-first; candidates restricted to the last sweep's visible set)
+   variant                           tiles   KB sent  KB save      t90 cov(late)  cov(min)  holes/step
+   no culling (baseline)              1836     297.8        -        6    100.0%    100.0%         0.0
+   slack=8 sweep every 1 step         1836     297.8     0.0%        6    100.0%    100.0%         0.0
+   slack=8 sweep every 4 steps        1711     274.7     7.8%        9     83.1%     77.4%       122.4
+   slack=8 sweep every 10 steps       1474     237.9    20.1%      >25     58.4%     41.9%       302.4
+   slack=32 sweep every 1 step        1836     297.8     0.0%        6    100.0%    100.0%         0.0
+   slack=32 sweep every 4 steps       1713     274.9     7.7%        9     83.1%     77.4%       122.4
+   slack=32 sweep every 10 steps      1480     238.4    20.0%      >25     58.4%     41.9%       302.4
+   slack=8 PADDED, every 4 steps      1836     297.8     0.0%        6     99.9%     99.4%         0.9
+   slack=8 PADDED, every 10 steps     1832     297.4     0.1%        6     99.6%     99.4%         2.8
+
+== REAL sweep false-occlusion vs azimuth rays (49 viewpoints on a grid over the valid region)
+   eye=ground+2   bins=1024  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=31.18x  (n=47)
+   eye=ground+2   bins=2048  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=31.17x  (n=47)
+   eye=ground+2   bins=4096  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=31.19x  (n=47)
+   eye=ground+60  bins=1024  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=1.05x  (n=49)
+   eye=ground+60  bins=2048  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=1.05x  (n=49)
+   eye=ground+60  bins=4096  mean miss=0.00% worst viewpoint=0.00%  sweep/truth=1.05x  (n=49)

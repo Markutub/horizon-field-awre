@@ -1,0 +1,273 @@
+AWRE — ADAPTIVE WORLD REPRESENTATION ENGINE
+MASTER PROMPT / TECHNICAL SPECIFICATION — REVISION v2
+(Changes against the original are marked [v2]. See docs/AWRE_CRITIQUE.md for the reasons.)
+Direction C: Build Everything In-House (Paper Plugin + Fabric Client Mod + Custom Protocol)
+
+ROLE
+Act as a principal graphics/engine architect, Minecraft Java mod developer, distributed-systems engineer, and performance researcher. Design and implement AWRE, an original far-terrain engine intended to compete with or outperform Voxy and Distant Horizons in a measurable set of workloads. Do not claim superiority without reproducible benchmark evidence.
+
+PRIMARY GOAL
+Create a complete custom technology stack:
+1. Paper plugin: authoritative world-data capture, change tracking, optional prediction coordination, persistent cache, and controlled distribution.
+2. Fabric client mod: custom multiresolution terrain representation, streaming, cache, mesh generation, visibility/error selection, GPU rendering, and transitions between far terrain and vanilla chunks.
+3. Custom versioned protocol between server plugin and client mod.
+4. Shared core/data model and automated benchmark suite.
+
+Target environment initially:
+- Minecraft Java Edition 1.21.11.
+- Paper server API for the server plugin.
+- Fabric client mod for the renderer.
+- Java 21 unless the exact selected Minecraft/Fabric toolchain requires otherwise; document the verified toolchain and do not silently mix Java targets.
+- Treat every Minecraft version as a separately tested compatibility target.
+- [v2] Toolchain starting point to VERIFY, not to trust: Fabric Loader 0.18.x, Loom 1.14, Fabric API 0.141.x+1.21.11, Gradle 9.2+, Java 21, Mojang official mappings (1.21.11 is the last obfuscated release), Paper API 1.21.11-R0.1-SNAPSHOT. Fabric Loom builds must be a separate Gradle build from the Paper modules.
+- Keep server-side vanilla access as a fallback: players without the client mod can join and play normally, but do not promise them extended LOD rendering.
+
+CORE PRODUCT REQUIREMENTS
+- Render far terrain beyond the ordinary vanilla client render distance for clients that install the AWRE mod.
+- Balance view distance, visual quality, CPU, RAM, VRAM, storage, and network use.
+- Show predicted terrain beyond explored/generated chunks where the world generator can be reproduced safely.
+- Clearly distinguish predicted data from authoritative server data.
+- When real chunks become available, replace predictions and update affected tiles.
+- Preserve player-built structures, mining, terrain edits, and plugin-generated changes accurately.
+- Avoid blocking the Paper main tick thread with expensive LOD work.
+- Keep the data model and algorithms independent from Paper/Fabric internals wherever practical.
+- Use asynchronous processing with explicit bounded queues and budgets.
+- Never allow unbounded client requests, payload allocation, decompression, cache growth, or task creation.
+- Do not silently fall back to guessed terrain when generator compatibility is unknown.
+
+VERIFICATION LABELS [v2]
+Every file, build, test and claim carries exactly one label: SOURCE-ONLY (written, not compiled), BUILT (compiled, output inspected), TESTED (tests executed, output inspected), RUN (executed on a real Paper server / Fabric client, logs inspected), MEASURED (benchmark with raw data kept). Never state a stronger label than what was actually done. An environment without Paper/Fabric/Gradle artifacts can only produce SOURCE-ONLY for those modules, so the pure-Java protocol and data-model modules must be TESTED there and kept free of Minecraft types.
+
+TRANSPORT FACTS TO RESPECT [v2]
+- Hard size limits exist: a Paper plugin message is limited by Messenger.MAX_MESSAGE_SIZE (verify the constant) and the vanilla client-to-server custom payload limit is 32767 bytes. Design around one frame of about 32000 bytes or less and specify bounded fragmentation/reassembly (max fragments, max reassembled size, timeout) as soon as a tile can exceed it. Never assume a tile fits one message.
+- Do not assume Paper delivers a plugin message to a client that has not announced the channel (minecraft:register). Make the client speak first (HELLO), treat "no response after N bounded retries" as "vanilla client", and expose which case happened in diagnostics.
+- Plugin messages and commands arrive on the main thread: check the size and discard hostile input before parsing, then hand real work to bounded workers.
+- Mappings: Fabric's 1.21.11 documentation uses Mojang names (CustomPacketPayload, StreamCodec, Identifier; ResourceLocation was renamed Identifier in 1.21.11). Record the porting cost to the first unobfuscated release in the compatibility matrix.
+- Proxies (Velocity/BungeeCord) may filter or rewrite plugin channels: test, or document as unsupported.
+
+ARCHITECTURE
+Create separate modules (adapt names to the chosen build system):
+- awre-api: stable tile keys, world identity, revisions, data-state enums, serialization contracts, metrics interfaces.
+- awre-core: canonical world representation, tile hierarchy, LOD selection utilities, error estimation, cache policies, compression abstractions.
+- awre-paper: Paper lifecycle integration, chunk/block capture, change journal, authoritative tile service, permission/configuration, protocol endpoint.
+- awre-worldgen: optional prediction adapters, isolated from the core and disabled unless generator compatibility is verified.
+- awre-fabric: client networking, local disk/RAM cache, scheduling, tile hierarchy, mesh construction, GPU resources, far-terrain rendering, vanilla transition.
+- awre-bench: repeatable workloads, camera/path replay, telemetry collection, visual/error comparison, CSV/JSON report generation.
+The precise module layout may change if the selected toolchain imposes constraints, but retain the architectural boundaries.
+
+CANONICAL WORLD REPRESENTATION
+Do not use a single heightmap as the universal representation. Support:
+1. Terrain surface data: height, slope/normal approximation, surface material, biome and water/shoreline information where available.
+2. Volumetric or sparse features: cliffs, overhangs, caves, floating structures and other features that a surface-only heightmap cannot represent. Use a sparse or hierarchical representation only where necessary.
+3. Sparse edit overlay: authoritative changes such as construction, mining, block replacement and plugin edits.
+4. Metadata: dimension, world identity, generator fingerprint, schema version, tile revision, provenance (PREDICTED or AUTHORITATIVE), confidence/quality flags, and parent-child dependencies.
+A tile must never be marked authoritative merely because it was generated from a seed. Authority comes from verified server data or a verified, reproducible generator contract.
+
+MULTIRESOLUTION DATA
+- Start with a simple, testable hierarchy: quadtree-like subdivision for surface terrain and a sparse volumetric hierarchy for non-surface features where required.
+- Treat L0 = one chunk as a starting experiment, not a fixed optimum.
+- Build parent tiles from a consistent snapshot of child/source revisions.
+- Track dirty regions and rebuild only affected tiles.
+- Avoid holes and inconsistent boundaries between neighboring tiles and different LOD levels.
+- Record geometric error or another meaningful approximation-error metric for each tile.
+- Do not add complex structures such as SVOs, neural representations, or GPU-driven pipelines until a baseline proves their need.
+
+SCREEN-SPACE LOD
+Use screen-space error instead of distance-only LOD selection. A starting perspective approximation is:
+E_px ~= e * H * f_p / (2 * d)
+where e is geometric error, H is viewport height in pixels, f_p is the dimensionless perspective projection factor, and d is camera distance in world units.
+This is only an initial heuristic. Validate units, projection behavior, camera near/far conditions, silhouettes, vertical structures, and occlusion. Use hysteresis to avoid rapid LOD oscillation. Prioritize visible silhouettes and salient structures, not just average terrain height error.
+
+PREDICTED TERRAIN
+[v2] Scope decision: the default design contains NO re-implementation of vanilla world generation (it is large, version-specific and licensing-sensitive). Distant data comes from real chunks: budgeted, asynchronous, rate-limited SERVER-SIDE PRE-GENERATION feeding the normal authoritative capture path. The generator-reproduction adapter described below is a research track that may start only after G3, for a documented generator contract, and must first present a cost estimate and a clean-room/licensing plan; otherwise mark it NOT PLANNED.
+- Predict only if the exact world seed, dimension, generator/version, relevant settings, datapacks, and required plugin behavior are sufficiently known.
+- Run prediction away from the Paper main tick thread.
+- Tag predicted tiles and their provenance; include a confidence/compatibility status.
+- When authoritative chunks arrive, replace prediction and invalidate all dependent parent tiles.
+- If the generator cannot be reproduced reliably, show a conservative coarse approximation or leave the region unavailable rather than fabricate certainty.
+- Benchmark prediction accuracy against subsequently generated real chunks across plains, mountains, rivers, oceans, caves, structures, and custom-worldgen cases.
+- Do not assume that matching a seed alone reproduces plugin-modified world generation.
+
+PLAYER EDITS / AUTHORITATIVE UPDATES
+- Record changes with revisions or a journal.
+- Apply edits to a sparse overlay and propagate dirty state to affected tiles.
+- Ensure old tile payloads cannot overwrite newer revisions.
+- Test block placement, breaking, explosions, pistons, fluids, world edits, chunk unload/reload, server restart, and plugin-mediated edits where supported.
+- Structures must remain recognizable at distance; use simplified proxy geometry when full detail is not justified.
+- Document any event classes of edits that cannot be captured and provide a safe resynchronization path.
+
+INFORMATION EXPOSURE AND AUTHORIZATION [v2]
+Sending far terrain, structures and the edit overlay discloses world information beyond what vanilla shows at the player's render distance. Before G3 define what may be sent: surface data only by default; no underground or ore data (respect anti-xray); a per-world and per-permission allow-list; a maximum send radius per player; excluded regions (spawn protection, claimed or hidden bases); no edit-overlay detail for regions the player may not see. List the residual leak (for example coastlines and very large builds becoming visible) in the limitations. The default must never expose more than a client could already learn by travelling there.
+
+CUSTOM NETWORK PROTOCOL
+Define a documented, versioned protocol. A tile message should include at minimum:
+- protocol version
+- world/dimension identity
+- tile key and LOD level
+- revision/generation identifier
+- data provenance/state (PREDICTED, AUTHORITATIVE, DIRTY or equivalent)
+- encoding/compression identifier
+- compressed and maximum decoded lengths
+- checksum or integrity validation
+- payload
+Implement:
+- [v2] an explicit frame layout (magic, version, type, sequence, length, checksum), a per-session state machine with strikes, malformed input dropped WITHOUT reply (no amplification), repeated offenders ignored until reconnect, and a documented maximum frame size
+- capability negotiation and graceful incompatibility handling
+- bounded message size before allocation/decompression
+- bounded concurrent decode tasks and per-player queues
+- rate limits, request radius/priority limits, backpressure and cancellation of stale requests
+- acknowledgements or a reliable retry strategy
+- duplicate/out-of-order message handling
+- disconnect/reconnect recovery
+- cache invalidation and protocol schema migration
+- strict input validation; never trust client-provided tile keys or sizes
+- no arbitrary server filesystem access from packet fields
+- metrics for bytes sent, rejected requests, decode time, queue depth, and cache hits
+Do not assume a custom payload API from another Minecraft version is unchanged. Verify against the exact 1.21.11 Fabric and Paper APIs selected for the build.
+
+CACHE AND RESOURCE BUDGETS
+Implement distinct budgets for:
+- persistent server SSD cache
+- server RAM working set
+- client disk cache
+- client RAM cache
+- client VRAM/GPU buffers
+- network throughput and queued bytes
+Use stable cache keys containing world identity, dimension, generator fingerprint, schema version, tile key, and relevant configuration. Prevent stale data from being reused after generator/config changes.
+Use asynchronous, bounded work queues. Track actual GPU resource lifetime and avoid freeing buffers still in use. Define eviction policy using utility, recency, reuse likelihood, and rebuild cost rather than distance alone.
+Record cold-cache and warm-cache behavior separately.
+
+FABRIC RENDERER
+Implement in small increments:
+1. Render one simple tile using the supported Minecraft rendering integration.
+2. Render multiple adjacent tiles with different LOD levels.
+3. Add crack-free boundaries via stitching, skirts only as a temporary fallback, geomorphing, or another tested method.
+4. Add camera/frustum visibility and screen-space error selection.
+5. Add material/color handling consistent with available biome/surface data.
+6. Add transition behavior between far terrain and actual vanilla chunks.
+7. Add bounded asynchronous mesh generation and upload scheduling.
+8. Test compatibility with the base Fabric client first, then Sodium, Iris, and shader packs separately.
+Do not claim Sodium/Iris compatibility until tested on exact versions. Avoid relying on unsupported direct OpenGL calls or private rendering internals without documenting the compatibility cost. Isolate version-specific render hooks behind adapters.
+
+PAPER SERVER SAFETY AND PERFORMANCE
+- No expensive mesh generation, prediction, file IO, compression, or network preparation on the main tick thread unless demonstrably trivial.
+- Capture required state safely on the correct thread; pass immutable snapshots to workers.
+- Bound all queues and per-tick work.
+- Avoid modifying vanilla chunk behavior unless explicitly required.
+- Keep a vanilla-compatible fallback.
+- Add configuration for cache size, prediction enablement, player budgets, send radius, rate limits, worker limits, and diagnostics.
+- Include graceful shutdown, cache flushing, corruption recovery, and reload behavior.
+- Provide commands such as /awre status, /awre stats, /awre reload, /awre cache and /awre debug, with permissions and tab completion.
+
+BENCHMARK PLAN
+Compare four configurations where technically possible:
+A. Vanilla baseline.
+B. Distant Horizons.
+C. Voxy and, where supported, its server-side data path.
+D. AWRE.
+Lock exact Minecraft, loader, mod/plugin, Java, OS, GPU driver, resolution, shader, render distance, simulation distance, and world seed/config. Record versions and hashes. Do not compare a cold-cache run to a warm-cache run.
+
+Required scenes:
+- flat plains
+- high mountains and valleys
+- dense forest
+- ocean, islands and coastlines
+- cliffs/overhangs/caves
+- large player-built settlement
+- fast flight into unseen terrain
+- continuous block edits
+For every scene run cold cache, warm cache, and dynamic-update cases. Replay the same camera path and movement.
+
+Collect:
+- average FPS, 1% low and 0.1% low
+- frame-time p50/p95/p99
+- CPU time by main, worker and render thread
+- peak RAM and VRAM, allocation rate
+- tile build time and time-to-visible
+- average/peak/total network bytes
+- cache hit rate and rebuild count
+- geometry/silhouette/image error against a reference
+- prediction error against later authoritative chunks
+- Paper tick duration and server MSPT impact
+- correctness of revision ordering and edit propagation
+Produce CSV/JSON raw results plus a concise summary. Repeat runs enough to estimate variability. Document limitations and failed runs instead of hiding them.
+
+GATES — DO NOT SKIP
+G0 — Toolchain and protocol feasibility [v2: measurable]:
+- BUILT: a minimal Paper plugin and Fabric client for exact Minecraft 1.21.11, with the toolchain (Gradle, Loom, Loader, Fabric API, mappings, Java) documented.
+- RUN: a handshake and one deterministic test tile whose decoded content the client verifies; the server receives an acknowledgement.
+- RUN: version negotiation, including an incompatible client that stays fully playable, and a vanilla client (no mod) that sees no change and no errors.
+- RUN: bounded-decode fault injection on the real stack (bad checksum, truncated frame, oversize frame, inflate bomb, payload above the codec limit): the client stays connected, nothing is allocated from untrusted lengths, rejections are logged and counted.
+- MEASURED: main-thread time spent in the message handler (average and maximum) during the test session.
+Pass only if every item has RUN/MEASURED evidence (logs kept) and no authoritative chunk was altered. Otherwise record the failure and its cause; do not proceed to G1.
+
+G1 — Data representation:
+- Generate tiles for a small known area.
+- Measure storage size, build time and geometric error.
+- Verify adjacent tile boundaries and revision consistency.
+Pass only if errors fit a predefined budget and edits invalidate the correct dependencies.
+
+G2 — Minimal renderer:
+- Render a tile beside real Minecraft chunks.
+- Test camera motion, different LOD levels, seams and transition.
+Pass only if there are no critical holes, crashes or unbounded memory growth in a repeatable test.
+
+G3 — Streaming/cache:
+- Traverse uncached terrain, reconnect, cancel stale requests, and impose low bandwidth/memory budgets.
+Pass only if queues remain bounded, newer revisions win and stale data does not reappear.
+
+G4 — Prediction and edits:
+- Predict regions, later generate the real chunks, and compare.
+- Place/break blocks and modify structures after cache creation.
+Pass only if authoritative data always wins and edited structures converge correctly.
+
+G5 — Competitive benchmark:
+- Compare AWRE with DH/Voxy under identical, documented conditions.
+- Suggested initial targets, not promises: frame-time p95 no more than 5% worse than the chosen baseline; at least 15% reduction in peak RAM or VRAM, OR a clearly measured visual/view-coverage improvement at the same resource budget; edit-update p95 under 1 second in a controlled test.
+- Define visual-error limits before running the comparison.
+- [v2] Statistical protocol: pre-register metrics, pass thresholds and camera paths before the first run; fixed warm-up; at least 10 runs per configuration and scene; report medians with a bootstrap confidence interval and keep the raw per-run values; discard no run without a logged reason; compare cold and warm separately; list the features DH/Voxy have that AWRE lacks (and the reverse) so "same quality" is defined, not assumed.
+Pass only if AWRE has a meaningful, repeatable advantage in at least one important metric without violating the agreed quality/resource limits. If not, profile, revise or stop.
+
+IMPLEMENTATION ORDER
+Phase 0: Inspect existing project files and current implementation before editing. Do not overwrite working code blindly.
+Phase 1: Lock toolchain, module boundaries, protocol spec, test world and benchmark harness.
+Phase 2: Implement shared data model, tile keys, revisions, provenance and serialization tests.
+Phase 3: Implement Paper capture and a minimal test-tile endpoint.
+Phase 4: Implement Fabric receiver and render a single tile.
+Phase 5: Add hierarchy, mesh/error metrics, seam handling and screen-space selection.
+Phase 6: Add bounded streaming, persistent caches and edit journal.
+Phase 7: Add prediction adapters and confidence handling.
+Phase 8: Run G0-G5 and publish raw results.
+Do not skip ahead to prediction, neural rendering, complex sparse voxel structures, or elaborate shader effects before the minimal pipeline works.
+
+DELIVERABLES
+- Complete source files with exact paths.
+- Build files and dependency versions.
+- Configuration examples with safe defaults.
+- Protocol specification and schema/version policy.
+- Build/run/test instructions for server and client.
+- Automated unit/integration tests.
+- Reproducible benchmark scripts and test-scene instructions.
+- CSV/JSON benchmark outputs when runs are actually performed.
+- A known-limitations list, compatibility matrix and license/dependency audit.
+- A concise change log describing exactly what changed.
+Do not claim a build, test, compatibility check or benchmark passed unless it was actually run and its output was inspected. Never fabricate metrics.
+
+WORKING STYLE
+- [v2] Reuse existing working code (for example a HorizonField core: tile pyramid, cache log, codec, tests) instead of rewriting it; add the new modules next to it and keep a table mapping old names to the awre-* module names. Label every deliverable (see VERIFICATION LABELS).
+- First inspect the repository, uploaded files and current implementation.
+- State the current project structure and identify missing information.
+- Make small, compiling, testable changes rather than generating a huge unverified code dump.
+- Prefer complete source files with exact paths when requested; do not package a ZIP unless explicitly asked.
+- Keep explanations concise when the user requests code-only output.
+- When a toolchain/API detail is uncertain, verify it against the exact version's documentation or source before coding.
+- Distinguish facts, hypotheses and measured results.
+- Preserve existing working functionality unless a change is explicitly required.
+- Do not copy code from Voxy, Distant Horizons, or other projects without checking license terms and complying with them. Prefer a clean-room implementation and keep a dependency/license inventory.
+- Do not describe AWRE as “better than Voxy/DH” until G5 produces reproducible evidence.
+
+FIRST TASK [v2]
+1. Inspect the supplied repository and state its structure; identify what can be reused.
+2. Verify the exact 1.21.11 Fabric and Paper networking APIs from documentation (cite the pages) before coding.
+3. Implement only G0: a pure-Java protocol module with unit tests, the Paper plugin, the Fabric client mod, build files, safe default configuration, and a runbook containing the G0 acceptance checks.
+4. Report with the verification labels and list explicitly what was NOT run. Do not implement the renderer, caches, journal, hierarchy or prediction yet.

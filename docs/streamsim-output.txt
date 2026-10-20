@@ -1,0 +1,68 @@
+
+== walk, low budget: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step, 120 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 6.33x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            3093     460.0    24.3%        45     65.4%     81.1%     0.00       0.0%       0.0%       232
+   S2 L0 sweep-ranked             3098     460.6    24.5%        45     71.5%     91.6%     0.00       0.0%       0.0%       232
+   S3 clipmap nearest             2762     439.1    29.0%        45     73.6%     95.8%     0.31      48.1%      48.5%       247
+   S4 clipmap sweep-ranked        2792     445.4    29.0%        45     75.8%     98.3%     0.33      49.3%      49.6%       247
+   S5 clipmap keep-until-repl.     2762     439.1    29.0%        45     73.7%     95.8%     0.31      48.1%      48.5%       247
+
+== walk, high budget: speed=0.3 chunks/step, eye=ground+2, budget=16000 B/step, 120 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 6.33x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            5141     764.8    17.8%        20     92.4%    100.0%     0.00       0.0%       0.0%       232
+   S2 L0 sweep-ranked             5180     770.6    17.9%        17     93.3%    100.0%     0.00       0.0%       0.0%       232
+   S3 clipmap nearest             3304     532.6    28.9%        10     95.0%     99.3%     0.34      54.3%      54.4%       282
+   S4 clipmap sweep-ranked        3306     532.9    28.5%         9     95.4%     99.3%     0.34      54.5%      54.6%       282
+   S5 clipmap keep-until-repl.     3304     532.6    28.9%        10     95.0%     99.3%     0.34      54.3%      54.4%       282
+
+== elytra, 16 KB/step: speed=3.0 chunks/step, eye=ground+60, budget=16000 B/step, 120 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 1.22x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first           12620    1866.1    99.0%      >120     27.7%     29.9%     0.00       0.0%       0.0%      3753
+   S2 L0 sweep-ranked            12620    1866.1    99.0%      >120     27.7%     29.9%     0.00       0.0%       0.0%      3753
+   S3 clipmap nearest            12620    1866.1    99.0%      >120     16.9%     17.9%     0.00       0.0%       0.0%      3753
+   S4 clipmap sweep-ranked       12620    1866.1    99.0%      >120     16.9%     17.9%     0.00       0.0%       0.0%      3753
+   S5 clipmap keep-until-repl.    12620    1866.1    99.0%      >120     27.7%     29.9%     0.00       0.0%       0.0%      3753
+
+== elytra, 64 KB/step: speed=3.0 chunks/step, eye=ground+60, budget=64000 B/step, 120 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 1.22x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first           28247    4146.0    71.9%         6     97.5%     99.9%     0.00       0.0%       0.0%      3770
+   S2 L0 sweep-ranked            28252    4146.6    71.9%         6     97.5%     99.9%     0.00       0.0%       0.0%      3770
+   S3 clipmap nearest            24970    4011.7    92.4%         2     97.9%     99.1%     0.32      74.7%      74.5%      6913
+   S4 clipmap sweep-ranked       24970    4011.7    92.4%         2     97.9%     99.1%     0.32      74.7%      74.5%      6913
+   S5 clipmap keep-until-repl.    24970    4011.7    92.4%         2     97.9%     99.1%     0.31      74.7%      74.5%      6913
+
+== CULL study, walk, 16 KB/step (L0 nearest-first; candidates restricted to the last sweep's visible set)
+   variant                           tiles   KB sent  KB save      t90 cov(late)  cov(min)  holes/step
+   no culling (baseline)              5141     764.8        -       20    100.0%     99.8%         0.0
+   slack=8 sweep every 1 step         4048     603.4    21.1%       17    100.0%     99.8%         0.0
+   slack=8 sweep every 4 steps        3996     595.8    22.1%       17     98.9%     96.1%         5.8
+   slack=8 sweep every 10 steps       3887     580.1    24.1%       17     96.2%     90.8%        19.8
+   slack=32 sweep every 1 step        4972     738.6     3.4%       19    100.0%     99.8%         0.0
+   slack=32 sweep every 4 steps       4929     732.4     4.2%       19     98.9%     96.1%         5.8
+   slack=32 sweep every 10 steps      4816     716.7     6.3%       20     96.2%     90.8%        19.8
+   slack=8 PADDED, every 4 steps      4043     602.5    21.2%       17    100.0%     99.8%         0.0
+   slack=8 PADDED, every 10 steps     4036     601.1    21.4%       17    100.0%     99.8%         0.0
+
+== CULL study, elytra, 64 KB/step (L0 nearest-first; candidates restricted to the last sweep's visible set)
+   variant                           tiles   KB sent  KB save      t90 cov(late)  cov(min)  holes/step
+   no culling (baseline)             28247    4146.0        -        6     99.9%     99.9%         2.0
+   slack=8 sweep every 1 step        28114    4126.4     0.5%        6     99.9%     99.9%         2.0
+   slack=8 sweep every 4 steps       27240    3998.5     3.6%        9     86.7%     76.0%       326.3
+   slack=8 sweep every 10 steps      22105    3246.5    21.7%       43     60.2%     34.4%       962.1
+   slack=32 sweep every 1 step       28247    4146.0     0.0%        6     99.9%     99.9%         2.0
+   slack=32 sweep every 4 steps      27537    4043.7     2.5%        9     86.9%     76.3%       318.9
+   slack=32 sweep every 10 steps     22495    3307.6    20.2%       43     60.8%     34.7%       946.4
+   slack=8 PADDED, every 4 steps     28042    4115.4     0.7%        6     99.7%     97.2%         6.7
+   slack=8 PADDED, every 10 steps    27708    4063.3     2.0%        6     97.4%     89.0%        64.8
+
+== sweep false-occlusion vs azimuth rays (20 positions, walk and elytra eye heights)
+   eye=ground+2   bins=1024  miss=0.00%  sweep/truth=6.71x
+   eye=ground+2   bins=2048  miss=0.00%  sweep/truth=6.75x
+   eye=ground+2   bins=4096  miss=0.00%  sweep/truth=6.75x
+   eye=ground+60  bins=1024  miss=0.00%  sweep/truth=1.21x
+   eye=ground+60  bins=2048  miss=0.00%  sweep/truth=1.22x
+   eye=ground+60  bins=4096  miss=0.00%  sweep/truth=1.22x

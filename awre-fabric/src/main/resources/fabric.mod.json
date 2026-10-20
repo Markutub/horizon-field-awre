@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "awre",
+  "version": "${version}",
+  "name": "AWRE (G0)",
+  "description": "AWRE client endpoint for the versioned awre:main protocol: handshake and one bounded test tile. Renders nothing yet.",
+  "authors": ["AWRE"],
+  "license": "All-Rights-Reserved",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.awre.fabric.AwreClientMod"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

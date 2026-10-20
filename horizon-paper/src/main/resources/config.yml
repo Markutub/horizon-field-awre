@@ -1,0 +1,30 @@
+# HorizonField scaffold configuration. All values are clamped to safe ranges at load time.
+# This scaffold OBSERVES already-loaded chunks and offers diagnostics/experiments.
+# It never loads or generates chunks, and it does not render distant terrain.
+
+worlds:
+  enabled: []            # empty = all worlds; otherwise list world names
+
+capture:
+  queue-capacity: 4096              # bounded; excess requests are rejected (backpressure)
+  max-snapshots-per-tick: 2         # main-thread ChunkSnapshot cap per tick
+  budget-millis-per-tick: 0.5       # main-thread time budget for snapshotting per tick
+
+analysis:
+  threads: 1                        # 1-4 background threads
+  queue-capacity: 4096
+
+pyramid:
+  max-level: 6                      # level L covers 2^L x 2^L chunks
+
+storage:
+  flush-interval-seconds: 30
+
+sweep:
+  azimuth-bins: 1024
+  slack-blocks: 8.0                 # occluders lowered by this much (conservative against viewer movement)
+  default-max-radius-blocks: 512
+
+probe:
+  max-pillars: 24
+  max-seconds: 120

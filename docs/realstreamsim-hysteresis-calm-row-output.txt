@@ -1,0 +1,91 @@
+# RealStreamSim on a REAL capture (world 8e432d80, 69x69 chunks, paper 1.21.11, view=32 sim=10). Rings halved: L0[64,128) L1[128,192) L2[192,257]. 100 steps, 0.3 chunks/step.
+
+######## H=32
+real tiles=4761 chunks x[-33..35] z[-32..36]  rings(blocks): L0[64,128) L1[128,192) L2[192,257], hysteresis H=32
+
+== REAL walk straight, 4 KB: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 12.77x
+   NOTE: 1 of 100 steps had NO truth-visible chunk in the ring (excluded from sweep stats; coverage counts them as 100%)
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1525     212.4    33.6%        21     89.4%    100.0%     0.00       0.0%       0.0%        66
+   S2 L0 sweep-ranked             1537     214.5    33.2%        20     89.5%    100.0%     0.00       0.0%       0.0%        66
+   S3 clipmap nearest             1116     179.4    47.8%        10     92.5%     98.6%     0.40      64.3%      64.3%       116
+   S4 clipmap sweep-ranked        1116     179.4    47.8%        10     92.5%     98.6%     0.40      64.3%      64.3%       116
+   S5 clipmap keep-until-repl.     1116     179.4    47.8%        10     92.5%     98.6%     0.40      64.3%      64.3%       116
+   S6 S5 + level hysteresis        958     159.2    50.2%        10     92.6%     98.6%     0.61      58.6%      59.9%       108
+
+== REAL walk straight, 16 KB: speed=0.3 chunks/step, eye=ground+2, budget=16000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 12.77x
+   NOTE: 1 of 100 steps had NO truth-visible chunk in the ring (excluded from sweep stats; coverage counts them as 100%)
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1723     244.6    34.2%         6     97.4%    100.0%     0.00       0.0%       0.0%        66
+   S2 L0 sweep-ranked             1728     245.0    34.3%         6     97.4%    100.0%     0.00       0.0%       0.0%        66
+   S3 clipmap nearest             1155     186.6    48.3%         3     97.3%     98.6%     0.40      65.9%      65.0%       124
+   S4 clipmap sweep-ranked        1155     186.6    48.3%         3     97.3%     98.6%     0.40      65.9%      65.0%       124
+   S5 clipmap keep-until-repl.     1155     186.6    48.3%         3     97.3%     98.6%     0.40      65.9%      65.0%       124
+   S6 S5 + level hysteresis        994     166.1    50.9%         3     97.3%     98.6%     0.61      60.5%      60.8%       116
+
+== REAL back-and-forth, 4 KB: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 2.91x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1285     180.3    33.2%        22     90.5%    100.0%     0.00       0.0%       0.0%       311
+   S2 L0 sweep-ranked             1318     184.1    32.9%        17     92.0%    100.0%     0.00       0.0%       0.0%       344
+   S3 clipmap nearest              805     117.2    55.2%        10     93.4%     99.3%     0.54      43.0%      44.0%       365
+   S4 clipmap sweep-ranked         806     117.4    55.3%        10     93.5%     99.3%     0.54      42.9%      43.9%       366
+   S5 clipmap keep-until-repl.      805     117.2    55.2%        10     93.4%     99.3%     0.54      43.0%      44.0%       365
+   S6 S5 + level hysteresis        528      78.1    62.5%         9     93.6%     99.3%     0.62      31.3%      32.2%       179
+
+== REAL back-and-forth, 16 KB: speed=0.3 chunks/step, eye=ground+2, budget=16000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 2.91x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1390     197.4    36.4%         5     98.1%    100.0%     0.00       0.0%       0.0%       416
+   S2 L0 sweep-ranked             1400     199.3    36.5%         5     98.3%    100.0%     0.00       0.0%       0.0%       426
+   S3 clipmap nearest              837     124.2    57.2%         2     97.9%     99.3%     0.54      45.5%      47.4%       397
+   S4 clipmap sweep-ranked         838     124.4    57.3%         2     98.0%     99.3%     0.54      45.6%      47.3%       398
+   S5 clipmap keep-until-repl.      837     124.2    57.2%         2     97.9%     99.3%     0.54      45.5%      47.4%       397
+   S6 S5 + level hysteresis        553      84.0    65.3%         2     97.9%     99.3%     0.62      35.3%      38.0%       185
+
+######## H=64
+real tiles=4761 chunks x[-33..35] z[-32..36]  rings(blocks): L0[64,128) L1[128,192) L2[192,257], hysteresis H=64
+
+== REAL walk straight, 4 KB: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 12.77x
+   NOTE: 1 of 100 steps had NO truth-visible chunk in the ring (excluded from sweep stats; coverage counts them as 100%)
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1459     203.2    32.1%        21     89.4%    100.0%     0.00       0.0%       0.0%         0
+   S2 L0 sweep-ranked             1471     205.3    31.7%        20     89.5%    100.0%     0.00       0.0%       0.0%         0
+   S3 clipmap nearest             1031     167.0    46.8%        10     92.5%     98.6%     0.37      67.8%      67.2%        31
+   S4 clipmap sweep-ranked        1031     167.0    46.8%        10     92.5%     98.6%     0.37      67.8%      67.2%        31
+   S5 clipmap keep-until-repl.     1029     166.4    46.8%        10     92.5%     98.6%     0.36      67.7%      67.0%        29
+   S6 S5 + level hysteresis        726     120.2    50.1%        10     92.6%     98.6%     0.70      54.3%      54.4%         1
+
+== REAL walk straight, 16 KB: speed=0.3 chunks/step, eye=ground+2, budget=16000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 12.77x
+   NOTE: 1 of 100 steps had NO truth-visible chunk in the ring (excluded from sweep stats; coverage counts them as 100%)
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1657     235.4    33.0%         6     97.4%    100.0%     0.00       0.0%       0.0%         0
+   S2 L0 sweep-ranked             1662     235.8    33.0%         6     97.4%    100.0%     0.00       0.0%       0.0%         0
+   S3 clipmap nearest             1068     173.7    47.3%         3     97.3%     98.6%     0.37      69.0%      67.6%        37
+   S4 clipmap sweep-ranked        1068     173.7    47.3%         3     97.3%     98.6%     0.37      69.0%      67.6%        37
+   S5 clipmap keep-until-repl.     1066     173.1    47.4%         3     97.3%     98.6%     0.36      68.9%      67.5%        35
+   S6 S5 + level hysteresis        755     126.1    51.7%         3     97.3%     98.6%     0.69      56.2%      55.4%         3
+
+== REAL back-and-forth, 4 KB: speed=0.3 chunks/step, eye=ground+2, budget=4000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 2.91x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1050     144.8    33.9%        22     90.5%    100.0%     0.00       0.0%       0.0%        76
+   S2 L0 sweep-ranked             1073     147.5    33.7%        17     92.0%    100.0%     0.00       0.0%       0.0%        99
+   S3 clipmap nearest              543      81.0    54.9%        10     93.6%     99.7%     0.49      32.2%      33.6%       103
+   S4 clipmap sweep-ranked         543      81.0    55.1%        10     93.7%     99.7%     0.49      32.0%      33.3%       103
+   S5 clipmap keep-until-repl.      494      74.3    56.7%        10     93.6%     99.7%     0.49      32.4%      34.3%        54
+   S6 S5 + level hysteresis        316      46.2    70.3%         9     93.8%     99.7%     0.57       7.0%       9.2%         5
+
+== REAL back-and-forth, 16 KB: speed=0.3 chunks/step, eye=ground+2, budget=16000 B/step, 100 steps
+   sweep vs truth: false-occlusion (truth-visible chunks the sweep missed) = 0.00%, sweep set / truth set = 2.91x
+   strategy                      tiles   KB sent  useful% t90(step)  cov(all) cov(late) err(late) relevel t% relevel KB% resendKey
+   S1 L0 nearest-first            1085     149.9    38.5%         5     98.1%    100.0%     0.00       0.0%       0.0%       111
+   S2 L0 sweep-ranked             1087     150.3    38.5%         5     98.3%    100.0%     0.00       0.0%       0.0%       113
+   S3 clipmap nearest              561      84.7    57.6%         2     98.2%     99.7%     0.49      34.9%      37.2%       121
+   S4 clipmap sweep-ranked         561      84.7    57.6%         2     98.2%     99.7%     0.49      34.9%      36.9%       121
+   S5 clipmap keep-until-repl.      509      77.5    59.5%         2     98.2%     99.7%     0.49      34.2%      37.8%        69
+   S6 S5 + level hysteresis        327      49.1    74.9%         2     98.2%     99.7%     0.52      12.2%      17.4%         5

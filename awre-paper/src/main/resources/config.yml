@@ -1,0 +1,29 @@
+# AWRE G0 configuration. All values are validated and clamped at load; invalid sets fall back to safe defaults.
+enabled: true
+# Send one deterministic test tile for the player's chunk right after a successful handshake (G0 acceptance test).
+auto-send-test-tile: true
+debug: false
+# CI/diagnostics: after the handshake also send one fragmented noise tile of this side (0 = off, 16..256; 128 = 32 KiB raw).
+auto-fragment-test-side: 0
+# Terrain streaming (G1). Streams quadtree LOD tiles to every AWRE client. The terrain source is SYNTHETIC (made-up, labelled
+# PREDICTED); synthetic-chunk-radius N fills (2N+1)^2 chunks around 0,0 (0 = none). source: captured ignores it and reads loaded chunks
+# as players move around (in-memory only: the cache is rebuilt after a restart as chunks load again).
+stream:
+  enabled: false
+  source: synthetic               # synthetic = made-up PREDICTED terrain (see below); captured = real chunks the server has loaded (OBSERVED)
+  import-horizon-cache: true      # first start only: copy plugins/HorizonField/cache/<world>.hfl (same format and fingerprint) if AWRE has no file yet
+  persist: true                   # captured mode: keep terrain on disk (plugins/AWRE/terrain/<world>.hfl), replayed at start
+  synthetic-chunk-radius: 0       # 0..99 (99 = 39 601 chunks, about 50 MB)
+  radius: 1000                    # blocks, 256..8000
+  bytes-per-second: 250000        # per player, ASSUMED budget
+  max-held-tiles: 4096            # must not exceed the client cache (8192)
+limits:
+  max-frame-bytes: 16384          # per message; hard ceiling 32000 (one plugin message, no fragmentation in G0)
+  max-decoded-tile-bytes: 65536   # per tile after inflate
+  max-lod: 8
+  max-in-flight-tiles: 4          # unacknowledged tiles per player
+  hello-burst: 3
+  hello-refill-per-sec: 0.1       # one HELLO per 10 s sustained
+  tile-burst: 4
+  tile-refill-per-sec: 2.0
+  strike-limit: 5                 # malformed frames before a player's session is ignored until reconnect
