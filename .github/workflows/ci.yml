@@ -85,7 +85,7 @@ jobs:
           regex: .*fabric.*
           mc-runtime-test: fabric
           java: 21
-          fabric-api: "0.141.3+1.21.11"            # keep in step with awre-fabric/gradle.properties (fabric_version); drop the +mc suffix if the action rejects it
+          fabric-api: "0.141.3"            # keep in step with awre-fabric/gradle.properties (fabric_version); drop the +mc suffix if the action rejects it
 
   integration:
     name: Paper server + Fabric client (headless)
