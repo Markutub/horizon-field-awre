@@ -7,7 +7,7 @@ debug: false
 auto-fragment-test-side: 0
 # Terrain streaming (G1). Streams quadtree LOD tiles to every AWRE client. The terrain source is SYNTHETIC (made-up, labelled
 # PREDICTED); synthetic-chunk-radius N fills (2N+1)^2 chunks around 0,0 (0 = none). source: captured ignores it and reads loaded chunks
-# as players move around (in-memory only: the cache is rebuilt after a restart as chunks load again).
+# as players move around (with persist: true it is also kept on disk and replayed after a restart; the file of a world is created by its first observed chunk).
 stream:
   enabled: false
   source: synthetic               # synthetic = made-up PREDICTED terrain (see below); captured = real chunks the server has loaded (OBSERVED)

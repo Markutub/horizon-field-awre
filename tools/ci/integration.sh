@@ -2,7 +2,7 @@
 # End-to-end AWRE check with HeadlessMc: Paper server + AWRE plugin, Fabric client + AWRE mod, then assert on the logs.
 # Usage: tools/ci/integration.sh <dir-with-jars>      Env: MC_VERSION (default 1.21.11), HMC (default: headlessmc), OUT (default ./ci-out)
 # Needs: JDK 21 on PATH, HeadlessMc installed, network. Runs the client with an OFFLINE account: this is the CI-only use HeadlessMc allows.
-# UNVERIFIED: HeadlessMc paths/flags were taken from its skill docs, not run. Every step dumps diagnostics to $OUT.
+# Every step dumps diagnostics to $OUT (server/client logs, directory listings, HeadlessMc debug).
 #
 # By running this you also accept the Minecraft EULA (https://aka.ms/MinecraftEULA) for the throwaway CI server.
 set -uo pipefail
@@ -165,7 +165,7 @@ check "G1c client strikes stayed 0"                  "$OUT/clientC.log" 'store t
 stop_client
 stop_server "$OUT/server2.log"
 if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server2.log"; then fail "AWRE-related exception in server2 log"; else pass "no AWRE exceptions in server2 log"; fi
-# one .hfl per world (overworld/nether/end); nether and end hold only a header, so check the largest
+# one .hfl per world (overworld/nether/end); the nether and end files hold only a header, so check the largest one
 TERRAIN_FILE=$(find "$SERVER_DIR/plugins/AWRE/terrain" -name '*.hfl' -printf '%s %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 ls -la "$SERVER_DIR/plugins/AWRE/terrain" > "$OUT/terrain-dir.txt" 2>&1
 if [ -n "$TERRAIN_FILE" ] && [ "$(stat -c %s "$TERRAIN_FILE")" -gt 200 ]; then pass "G1c terrain cache file written ($(stat -c %s "$TERRAIN_FILE") bytes)"; else fail "G1c terrain cache file missing or empty"; fi

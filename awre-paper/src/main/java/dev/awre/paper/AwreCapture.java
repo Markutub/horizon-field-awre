@@ -21,7 +21,7 @@ import java.util.UUID;
  * Observes ONLY chunks the server has already loaded (never loads or generates one) and feeds them to the per-world
  * {@link AwreWorldTerrain} ingest. SOURCE-ONLY (never compiled against Paper yet). Same shape as horizon-paper's CaptureService:
  * handlers enqueue coordinates (O(1)); a time-budgeted main-thread drain takes ChunkSnapshots; analysis runs on worker threads.
- * In-memory only: nothing is persisted, the terrain is rebuilt as chunks load after a restart.
+ * Persistence (stream.persist) is handled by AwreStreaming/TerrainPersistence: the terrain is replayed from disk after a restart.
  */
 final class AwreCapture implements Listener {
     private record Ref(UUID world, int cx, int cz) { }

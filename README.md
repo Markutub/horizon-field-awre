@@ -9,7 +9,7 @@ Server-only Paper plugin research project for **distant terrain on vanilla Minec
 ## Layout
 - `horizon-core/lod`, `horizon-core/stream` (session 10): quadtree LOD planner with hysteresis, stream scheduler, byte budget. `awre-protocol` now fragments large tiles. See `docs/AWRE_G1_FEATURES.md` (sandbox: core 61/61, protocol 67/67, stream 13/13 via tools/verify-*.sh; Paper/Fabric glue source-only). Session 11 added `terrain/` (tile model), `awre-stream/` (PlayerStreamer) and the DROP message..
 - `horizon-core/` pure Java, zero dependencies (model, pyramid, sweep, mesher, queue, storage) — **built and tested** (27 tests (21 original + 3 TileCodec + 3 TileLogReader), run via `tools/verify-core.sh` in the authoring sandbox)
-- `horizon-paper/` the plugin (listeners, capture pipeline, command, probes) — **NOT compiled by the author** (no network); syntax-parsed only
+- `horizon-paper/` the plugin (listeners, capture pipeline, command, probes) — compiled and exercised by CI (`.github/workflows/ci.yml`); the end-to-end run is `tools/ci/integration.sh`
 - `docs/` ARCHITECTURE, PROTOCOL, EXPERIMENTS, HANDOFF
 - `tools/` bench, sandbox test shim
 

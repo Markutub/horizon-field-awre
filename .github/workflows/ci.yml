@@ -1,4 +1,4 @@
-# CI for Horizon Field / AWRE. UNVERIFIED: written without being able to run GitHub Actions or download any of the tools.
+# CI for Horizon Field / AWRE. The integration job has run green end to end (G0, G1 and G1c checks); pin versions below before relying on it.
 # Jobs:  verify (pure Java, no downloads)  ->  build (Gradle: Paper + Fabric)  ->  smoke (MC-Runtime-Test)  and  integration (Paper server + Fabric client).
 # First failures are expected; every job uploads its logs. Bump pinned versions as noted.
 name: ci

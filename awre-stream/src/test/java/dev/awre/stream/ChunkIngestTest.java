@@ -115,4 +115,27 @@ class ChunkIngestTest {
             assertEquals(0, store4.chunkCount());
         }
     }
+
+    @Test void cacheFileIsOnlyCreatedByTheFirstPersistedTile() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("awre-lazy");
+        java.nio.file.Path file = dir.resolve("terrain").resolve("w.hfl");
+        TerrainStore store = new TerrainStore(4, TerrainStore.Reduce.MEAN, 1000);
+        MaterialPalette pal = new MaterialPalette();
+        Metrics m = new Metrics();
+        try (TerrainPersistence p = TerrainPersistence.open(file, "fp-lazy", store, pal, m)) {
+            assertTrue(p.report().freshStart());
+            assertFalse(p.fileCreated());
+            p.flush();                                              // flushing an unused cache must not create the file either
+            assertFalse(java.nio.file.Files.exists(file), "an unobserved world must leave nothing on disk");
+            try (ChunkIngest in = new ChunkIngest(store, pal, 64, 1, m, t -> { }, null)) { in.submit(view(0, 0, 3, false), 0); assertTrue(waitUntil(() -> store.chunkCount() == 1, 5000)); }
+            p.persist(new dev.horizonfield.core.TerrainAnalyzer(pal).analyze(view(2, 2, 3, false), dev.horizonfield.core.Confidence.OBSERVED, 1L));
+            assertTrue(p.fileCreated());
+            assertTrue(java.nio.file.Files.size(file) > 0);
+        }
+        TerrainStore store2 = new TerrainStore(4, TerrainStore.Reduce.MEAN, 1000);
+        try (TerrainPersistence p2 = TerrainPersistence.open(file, "fp-lazy", store2, new MaterialPalette(), new Metrics())) {
+            assertTrue(!p2.report().freshStart() && p2.report().tiles() == 1, "replayed " + p2.report());
+            assertTrue(p2.fileCreated());
+        }
+    }
 }
