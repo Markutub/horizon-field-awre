@@ -12,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import java.util.UUID;
@@ -72,6 +73,10 @@ final class AwreCapture implements Listener {
         ChunkSnapshot snap = w.getChunkAt(ref.cx(), ref.cz()).getChunkSnapshot(true, false, false);   // already loaded: no load/generation
         t.ingest.submit(new AwreChunkView(snap, t.minY, t.maxY), nearestPlayerDistSq(w, ref.cx() * 16 + 8, ref.cz() * 16 + 8));
     }
+
+    /** Worlds loaded after the plugin started (multiworld plugins): set their terrain up right away. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldLoad(WorldLoadEvent e) { streaming.terrainFor(e.getWorld()); }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkLoad(ChunkLoadEvent e) { request(e.getWorld(), e.getChunk().getX(), e.getChunk().getZ()); }

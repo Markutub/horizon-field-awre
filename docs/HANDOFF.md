@@ -1,7 +1,7 @@
 # HANDOFF — read this first (for the next AI / developer)
 
 ## Session 14 addendum (LATEST)
-First real CI run: build, smoke (after fixing the fabric-api version string: the action appends "+<mc>" itself) and integration all GREEN. Then added CI phases 2-3 (captured terrain, disk cache, restart replay) to `tools/ci/integration.sh`; see docs/AWRE_G1_FEATURES.md section 7b. These phases are not yet run. Next: read their result; then Fabric render hook (via CI iteration) or calibration on a real .hfl.
+First real CI run: build, smoke (after fixing the fabric-api version string: the action appends "+<mc>" itself) and integration all GREEN. Then added CI phases 2-3 (captured terrain, disk cache, restart replay) to `tools/ci/integration.sh`; see docs/AWRE_G1_FEATURES.md section 7b. CI result: phase 2 PASSED fully (real chunks streamed, palette, noData, cache file 8400 B); phase 3 failed only because terrain was created lazily and nothing touched the world after restart -> fixed by creating every world's terrain at plugin start and on WorldLoadEvent (AwreStreaming.start, AwreCapture.onWorldLoad). Needs one more CI run to confirm. Next: read their result; then Fabric render hook (via CI iteration) or calibration on a real .hfl.
 
 ## Session 13 addendum
 User: "continue building" (twice). Delivered (docs/AWRE_G1_FEATURES.md section 7): `TerrainPersistence` (TileLog reuse, restart + torn-tail + fingerprint tests) wired into `ChunkIngest` and Paper (`stream.persist`, `stream.import-horizon-cache`, async replay, 30 s flush); `TerrainMesher` + `BlockColors` (property-tested greedy mesher with skirts); `TileMeshCache`; `tools/preview/TerrainPreview.java` with images in docs/img. Sandbox: core 61/61, protocol 67/67, stream 13/13.

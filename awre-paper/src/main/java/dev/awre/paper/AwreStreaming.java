@@ -55,7 +55,12 @@ final class AwreStreaming {
 
     void start(AwreConfig c) {
         this.cfg = c;
-        if (c.streamCaptured()) { capture = new AwreCapture(plugin, this); capture.start(); }
+        if (c.streamCaptured()) {
+            capture = new AwreCapture(plugin, this);
+            capture.start();
+            // load every world's terrain (and replay its disk cache) now, not when the first chunk event or player happens to touch it
+            plugin.getServer().getScheduler().runTask(plugin, () -> { for (World w : plugin.getServer().getWorlds()) terrainFor(w); });
+        }
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickAll, 20L, 2L);
         flushTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> { for (AwreWorldTerrain t : terrains.values()) t.flush(); }, 600L, 600L);   // every 30 s
     }
