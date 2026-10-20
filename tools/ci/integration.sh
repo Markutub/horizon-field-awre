@@ -165,7 +165,8 @@ check "G1c client strikes stayed 0"                  "$OUT/clientC.log" 'store t
 stop_client
 stop_server "$OUT/server2.log"
 if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server2.log"; then fail "AWRE-related exception in server2 log"; else pass "no AWRE exceptions in server2 log"; fi
-TERRAIN_FILE=$(find "$SERVER_DIR/plugins/AWRE/terrain" -name '*.hfl' 2>/dev/null | head -1)
+# one .hfl per world (overworld/nether/end); nether and end hold only a header, so check the largest
+TERRAIN_FILE=$(find "$SERVER_DIR/plugins/AWRE/terrain" -name '*.hfl' -printf '%s %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 ls -la "$SERVER_DIR/plugins/AWRE/terrain" > "$OUT/terrain-dir.txt" 2>&1
 if [ -n "$TERRAIN_FILE" ] && [ "$(stat -c %s "$TERRAIN_FILE")" -gt 200 ]; then pass "G1c terrain cache file written ($(stat -c %s "$TERRAIN_FILE") bytes)"; else fail "G1c terrain cache file missing or empty"; fi
 
