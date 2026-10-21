@@ -63,4 +63,100 @@ class TileLogTest {
         shared.idOf("minecraft:netherrack");
         assertThrows(IllegalArgumentException.class, () -> TileLog.open(dir.resolve("a.hfl"), "A", shared, t -> { }));
     }
+
+    @Test
+    void compactionKeepsTheLastVersionOfEveryChunkAndShrinksTheFile() throws Exception {
+        Path f = Files.createTempDirectory("hf-test").resolve("w.hfl");
+        MaterialPalette pal = new MaterialPalette();
+        int stone = pal.idOf("minecraft:stone"), grass = pal.idOf("minecraft:grass_block");
+        TileLog.Opened o = TileLog.open(f, "fp-c", pal, t -> { });
+        TileLog log = o.log();
+        for (int version = 0; version < 5; version++)
+            for (int c = 0; c < 6; c++) log.append(TestUtil.flat(c, 0, 60 + version, c % 2 == 0 ? stone : grass));
+        log.append(TestUtil.flat(100, -7, 90, stone));
+        assertEquals(31, log.tileRecords());
+        assertEquals(7, log.liveTiles());
+        assertTrue(log.garbageRatio() > 0.75, "ratio " + log.garbageRatio());
+        long sizeBefore = log.sizeBytes();
+
+        TileLog.CompactReport r = log.compact();
+        assertEquals(31, r.recordsBefore());
+        assertEquals(7, r.recordsAfter());
+        assertEquals(sizeBefore, r.bytesBefore());
+        assertTrue(r.bytesAfter() < r.bytesBefore() / 3, "after " + r.bytesAfter() + " before " + r.bytesBefore());
+        assertEquals(r.bytesAfter(), log.sizeBytes());
+        assertEquals(7, log.tileRecords());
+        assertEquals(0.0, log.garbageRatio());
+        assertFalse(Files.exists(f.resolveSibling("w.hfl.compact")), "temp file must be gone after the swap");
+
+        // the log keeps working after the swap: appends land at the end of the NEW file
+        log.append(TestUtil.flat(2, 0, 123, stone));
+        log.close();
+
+        MaterialPalette pal2 = new MaterialPalette();
+        java.util.Map<Long, ColumnTile> last = new java.util.HashMap<>();
+        TileLog.Opened o2 = TileLog.open(f, "fp-c", pal2, t -> last.put(HeightPyramid.key(t.chunkX(), t.chunkZ()), t));
+        assertEquals(8, o2.report().tiles());                       // 7 survivors + 1 appended after compaction
+        assertEquals(0L, o2.report().discardedBytes());
+        assertEquals("minecraft:stone", pal2.keyOf(stone));
+        assertEquals("minecraft:grass_block", pal2.keyOf(grass));
+        assertEquals(7, last.size());
+        assertEquals(64, last.get(HeightPyramid.key(0, 0)).topAt(0, 0));     // version 4 (60 + 4) survived, not version 0
+        assertEquals(123, last.get(HeightPyramid.key(2, 0)).topAt(5, 5));    // the post-compaction append wins
+        assertEquals(90, last.get(HeightPyramid.key(100, -7)).topAt(1, 1));  // negative coordinates round-trip through the key
+        assertEquals(7, o2.log().liveTiles());
+        o2.log().close();
+    }
+
+    @Test
+    void compactionIsIdempotentAndWorksOnAnEmptyLog() throws Exception {
+        Path f = Files.createTempDirectory("hf-test").resolve("w.hfl");
+        TileLog empty = TileLog.open(f, "fp-e", new MaterialPalette(), t -> { }).log();
+        TileLog.CompactReport r0 = empty.compact();
+        assertEquals(0, r0.recordsBefore());
+        assertEquals(0, r0.recordsAfter());
+        assertEquals(r0.bytesBefore(), r0.bytesAfter());
+        empty.append(TestUtil.flat(1, 1, 70, 0));
+        empty.append(TestUtil.flat(1, 1, 71, 0));
+        TileLog.CompactReport r1 = empty.compact();
+        TileLog.CompactReport r2 = empty.compact();
+        assertEquals(1, r1.recordsAfter());
+        assertEquals(r1.bytesAfter(), r2.bytesBefore());
+        assertEquals(r1.bytesAfter(), r2.bytesAfter());
+        empty.close();
+        List<ColumnTile> got = new ArrayList<>();
+        TileLog.open(f, "fp-e", new MaterialPalette(), got::add).log().close();
+        assertEquals(1, got.size());
+        assertEquals(71, got.get(0).topAt(0, 0));
+    }
+
+    @Test
+    void compactionDropsATornTailAndALeftoverTempFileIsIgnored() throws Exception {
+        Path f = Files.createTempDirectory("hf-test").resolve("w.hfl");
+        TileLog log = TileLog.open(f, "fp-t", new MaterialPalette(), t -> { }).log();
+        log.append(TestUtil.flat(0, 0, 64, 0));
+        log.append(TestUtil.flat(0, 0, 65, 0));
+        log.append(TestUtil.flat(1, 0, 66, 0));
+        log.flush();
+        // a half-written record behind the live channel position (what a crash mid-append leaves; open() would cut it, compact() must too)
+        long good = log.sizeBytes();
+        try (java.nio.channels.FileChannel x = java.nio.channels.FileChannel.open(f, StandardOpenOption.WRITE)) {
+            x.position(good);
+            x.write(java.nio.ByteBuffer.wrap(new byte[]{2, 0, 0, 4, 0, 9, 9, 9}));
+        }
+        TileLog.CompactReport r = log.compact();
+        assertEquals(3, r.recordsBefore());
+        assertEquals(2, r.recordsAfter());
+        log.close();
+
+        // a temp file left by a crash before the swap must neither be read nor survive the next open
+        Path tmp = f.resolveSibling("w.hfl.compact");
+        Files.write(tmp, new byte[]{9, 9, 9});
+        List<ColumnTile> got = new ArrayList<>();
+        TileLog.Opened o = TileLog.open(f, "fp-t", new MaterialPalette(), got::add);
+        assertFalse(Files.exists(tmp));
+        assertEquals(2, got.size());
+        assertEquals(0L, o.report().discardedBytes());
+        o.log().close();
+    }
 }

@@ -3,6 +3,7 @@ package dev.awre.paper;
 import dev.awre.stream.ChunkIngest;
 import dev.awre.stream.TerrainPersistence;
 import dev.horizonfield.core.MaterialPalette;
+import dev.horizonfield.core.TileLog;
 import dev.horizonfield.core.terrain.TerrainStore;
 
 /** Terrain of one world (or the shared synthetic one): the store, its palette and, in captured mode, the ingest pipeline. */
@@ -19,6 +20,9 @@ final class AwreWorldTerrain {
     }
 
     void flush() { TerrainPersistence p = persistence; if (p != null) p.flush(); }
+
+    /** Async-safe: returns a report only when a compaction actually ran. */
+    TileLog.CompactReport compact(double minGarbageRatio, long minBytes) { TerrainPersistence p = persistence; return p == null ? null : p.compactIfWorthwhile(minGarbageRatio, minBytes); }
 
     void close() { ChunkIngest in = ingest; if (in != null) in.close(); else { TerrainPersistence p = persistence; if (p != null) p.close(); } }
 }

@@ -14,7 +14,8 @@ import java.nio.file.Path;
  * Disk persistence for captured terrain, built on the existing append-only, CRC-protected {@link TileLog} (the same format the
  * horizon-paper plugin uses, so a cache file is interchangeable). Opening replays the log into the store and the palette; a torn
  * tail is cut off, a different fingerprint starts fresh. Unchanged re-observations are not appended again. The palette passed in
- * must be brand new (the log restores ids into it). Compaction does not exist: the log grows with every real change.
+ * must be brand new (the log restores ids into it). The log grows with every real change; {@link #compactIfWorthwhile} rewrites it
+ * to the latest tile per chunk (callers: a periodic async task). Persisting waits while a compaction runs (one rewrite of the file).
  * The file is created LAZILY: if none exists yet, nothing touches the disk until the first tile is persisted, so worlds nobody
  * ever observes (nether, end, ...) leave no header-only files behind.
  */
@@ -66,6 +67,24 @@ public final class TerrainPersistence implements AutoCloseable {
         synchronized (lock) {
             if (log == null || closed) return;
             try { log.flush(); } catch (IOException e) { metrics.inc("persist.errors"); }
+        }
+    }
+
+    /**
+     * Compacts the cache file when at least {@code minGarbageRatio} of its tile records are superseded AND it is at least
+     * {@code minBytes} long. Cheap to call often (two counters are read). Returns null when nothing was done or on failure
+     * (failures are counted in {@code persist.errors}; the original file stays in use).
+     */
+    public TileLog.CompactReport compactIfWorthwhile(double minGarbageRatio, long minBytes) {
+        synchronized (lock) {
+            if (log == null || closed) return null;
+            try {
+                if (log.garbageRatio() < minGarbageRatio || log.sizeBytes() < minBytes) return null;
+                TileLog.CompactReport r = log.compact();
+                metrics.inc("persist.compactions");
+                metrics.add("persist.compact-saved-bytes", r.bytesSaved());
+                return r;
+            } catch (IOException | RuntimeException e) { metrics.inc("persist.errors"); return null; }
         }
     }
 

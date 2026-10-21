@@ -46,7 +46,7 @@ Expected log lines (unverified until you run it):
 - Observes only chunks the server has loaded; no prediction from the world generator yet.
 - Surface heightfield only (no caves/overhangs); water/leaves treated as surface.
 - Block edits via place/break only (not explosions, pistons, fluids, WorldEdit).
-- Cache replay is synchronous on first use of a world; no log compaction.
+- Cache replay is synchronous on first use of a world in horizon-paper; AWRE's terrain log is compacted periodically (see docs/AWRE_G1_FEATURES.md 7c), horizon-paper's cache still is not.
 - `Player#getClientViewDistance` etc. and all Paper API calls are from memory of the API — expect to fix compile errors.
 
 

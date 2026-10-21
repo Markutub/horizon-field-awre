@@ -150,7 +150,7 @@ class TerrainStoreTest {
         }
         byte[] good = LodTileCodec.encode(s.tile(new LodKey(0, 0, 0)));
         assertThrows(IOException.class, () -> LodTileCodec.decode(new LodKey(0, 0, 0), new byte[10]));
-        byte[] badFmt = good.clone(); badFmt[0] = 2;
+        byte[] badFmt = good.clone(); badFmt[0] = 3;
         assertThrows(IOException.class, () -> LodTileCodec.decode(new LodKey(0, 0, 0), badFmt));
         byte[] badConf = good.clone(); badConf[1] = 9;
         assertThrows(IOException.class, () -> LodTileCodec.decode(new LodKey(0, 0, 0), badConf));

@@ -1,6 +1,15 @@
 # HANDOFF — read this first (for the next AI / developer)
 
-## Session 14 addendum (LATEST)
+## Session 15 addendum (LATEST)
+User: "read HANDOFF.md and keep building the next phase" + asked for technology/efficiency improvements. Offline sandbox only (no CI result was available), so the phase chosen was the one item from the Session 13/14 "next" list that is testable without Paper/Loom: **terrain log compaction** (docs/AWRE_G1_FEATURES.md section 7c).
+- `TileLog.compact()` (core, format v1 unchanged): keeps all palette records + the LAST valid tile per chunk (original order), writes `<file>.compact`, fsyncs, atomic-moves over the log, reopens for append. Failure keeps the old file in use; a leftover temp file is deleted by `open`. Also `tileRecords()`, `liveTiles()`, `garbageRatio()`, `sizeBytes()`, `CompactReport`.
+- `TerrainPersistence.compactIfWorthwhile(minGarbageRatio, minBytes)` (counters `persist.compactions`, `persist.compact-saved-bytes`); Paper: the existing 30 s async flush task calls it per world; config `stream.compact-garbage-ratio` (0.5) and `stream.compact-min-bytes` (1 MiB), validated in `AwreConfig`.
+- Tests (sandbox): core 64/64 (+3 compaction tests incl. torn tail, leftover temp, idempotence, empty log, negative coords), stream 15/15 (+1), protocol 67/67 (unchanged). Paper/Fabric sources syntax-parse (8 + 2 files); NOT compiled against real APIs.
+- Not verified: CI run of Session 14's fix (world terrain created at start / on WorldLoadEvent); compaction on a real multi-MB `.hfl`; time a compaction blocks `persist()` on a big world (it holds the log lock for one rewrite).
+- Also (session 15, second half): `LodTileCodec` format 2 + `tools/bench/run-lodcodec.sh` (section 7d). Finding: after the protocol's BEST_COMPRESSION deflate, v2 is NOT smaller on synthetic terrain (1.04-1.06x at levels 0-2, 0.84-0.94x at 3-4), so it is NOT used by the server; decoder accepts it. Core tests now 69/69 (+5 V2 tests; an old test's "bad format" byte changed from 2 to 3).
+- Next (in order): (1) read the CI result of Session 14 and fix; (2) Fabric render hook using `TileMeshCache` (needs a Fabric build to iterate against); (3) calibrate kappa/penalties/budget on a real `.hfl`; (4) if compaction pauses matter on big worlds, compact into a snapshot of live offsets without holding the lock for the copy; (5) tile delta/edit coding.
+
+## Session 14 addendum
 First real CI run: build, smoke (after fixing the fabric-api version string: the action appends "+<mc>" itself) and integration all GREEN. Then added CI phases 2-3 (captured terrain, disk cache, restart replay) to `tools/ci/integration.sh`; see docs/AWRE_G1_FEATURES.md section 7b. CI result: phase 2 PASSED fully (real chunks streamed, palette, noData, cache file 8400 B); phase 3 failed only because terrain was created lazily and nothing touched the world after restart -> fixed by creating every world's terrain at plugin start and on WorldLoadEvent (AwreStreaming.start, AwreCapture.onWorldLoad). Needs one more CI run to confirm. Next: read their result; then Fabric render hook (via CI iteration) or calibration on a real .hfl.
 
 ## Session 13 addendum

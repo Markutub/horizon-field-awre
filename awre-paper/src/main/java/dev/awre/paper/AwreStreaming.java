@@ -9,6 +9,7 @@ import dev.awre.stream.SyntheticTerrain;
 import dev.awre.stream.TerrainPersistence;
 import dev.horizonfield.core.MaterialPalette;
 import dev.horizonfield.core.Metrics;
+import dev.horizonfield.core.TileLog;
 import dev.horizonfield.core.lod.LodModel;
 import dev.horizonfield.core.lod.LodPlanner;
 import dev.horizonfield.core.terrain.TerrainStore;
@@ -62,7 +63,13 @@ final class AwreStreaming {
             plugin.getServer().getScheduler().runTask(plugin, () -> { for (World w : plugin.getServer().getWorlds()) terrainFor(w); });
         }
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickAll, 20L, 2L);
-        flushTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> { for (AwreWorldTerrain t : terrains.values()) t.flush(); }, 600L, 600L);   // every 30 s
+        flushTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            for (Map.Entry<UUID, AwreWorldTerrain> e : terrains.entrySet()) {
+                e.getValue().flush();
+                TileLog.CompactReport r = e.getValue().compact(cfg.compactGarbageRatio(), cfg.compactMinBytes());
+                if (r != null) plugin.getLogger().info("[AWRE] compacted terrain cache of world " + e.getKey() + ": " + r.recordsBefore() + " -> " + r.recordsAfter() + " records, " + r.bytesBefore() + " -> " + r.bytesAfter() + " bytes");
+            }
+        }, 600L, 600L);   // every 30 s
     }
 
     private static String fingerprint(World w) {

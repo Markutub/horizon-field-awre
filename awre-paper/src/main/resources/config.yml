@@ -17,6 +17,8 @@ stream:
   radius: 1000                    # blocks, 256..8000
   bytes-per-second: 250000        # per player, ASSUMED budget
   max-held-tiles: 4096            # must not exceed the client cache (8192)
+  compact-garbage-ratio: 0.5      # 0.1..0.95: rewrite a world's cache file when this share of its tile records is superseded (checked every 30 s)
+  compact-min-bytes: 1048576      # ...and the file is at least this big (0 = size does not matter)
 limits:
   max-frame-bytes: 16384          # per message; hard ceiling 32000 (one plugin message, no fragmentation in G0)
   max-decoded-tile-bytes: 65536   # per tile after inflate
