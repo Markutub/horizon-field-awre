@@ -113,6 +113,9 @@ check "G1 server reports a hole-free stream"          "$OUT/server.log"  'stream
 check "G1 no tile failures reported by the server"    "$OUT/server.log"  'stream [^:]+: .*failures=0'
 check "G1 client received the 5-entry synthetic palette" "$OUT/clientA.log" 'palette_entries=5 '
 check "G1 client strikes stayed 0"                    "$OUT/clientA.log" 'store tiles=[0-9]+ .*strikes=0'
+wait_for "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*' 120 || echo "client A: no meshed tiles seen within timeout"
+check "G2 client built meshes from streamed tiles"    "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*'
+check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizon view: .* failures=0'
 if grep -Eq 'Exception|Caused by' "$OUT/clientA.log"; then
   grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null && fail "AWRE-related exception/rejection in client log" || pass "no AWRE exceptions in client log (unrelated exceptions may exist)"
 else pass "no exceptions in client log"; fi
