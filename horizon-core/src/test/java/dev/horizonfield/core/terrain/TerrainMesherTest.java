@@ -99,4 +99,41 @@ class TerrainMesherTest {
         assertEquals(BlockColors.argb("mod:thing"), BlockColors.argb("mod:thing"));
         assertTrue((BlockColors.argb("mod:thing") >>> 24) == 0xFF);
     }
+
+    @Test void meshLocalIsTheSameGeometryRelativeToTheTileOrigin() {
+        for (int lod = 0; lod <= 3; lod++) {
+            LodTile t = tile(lod, -3, 5, (x, z) -> 60 + ((x / 4 + z / 4) % 3) * 4, (x, z) -> 1 + (x + z) % 2);
+            TerrainMesher.Mesh abs = TerrainMesher.mesh(t, PAL, 4), loc = TerrainMesher.meshLocal(t, PAL, 4);
+            double cell = 1 << lod;
+            assertEquals(0.0, abs.originX);
+            assertEquals(-3.0 * 16 * cell, loc.originX);
+            assertEquals(5.0 * 16 * cell, loc.originZ);
+            assertEquals(abs.vertexCount(), loc.vertexCount());
+            assertEquals(abs.triangleCount(), loc.triangleCount());
+            for (int v = 0; v < abs.vertexCount(); v++) {
+                assertTrue(Math.abs(abs.positions[v * 3] - (loc.positions[v * 3] + loc.originX)) < 1e-4, "x");
+                assertEquals((Object) abs.positions[v * 3 + 1], (Object) loc.positions[v * 3 + 1], "y");
+                assertTrue(Math.abs(abs.positions[v * 3 + 2] - (loc.positions[v * 3 + 2] + loc.originZ)) < 1e-4, "z");
+                assertTrue(loc.positions[v * 3] >= 0 && loc.positions[v * 3] <= 16 * cell, "local x inside the tile");
+                assertTrue(loc.positions[v * 3 + 2] >= 0 && loc.positions[v * 3 + 2] <= 16 * cell, "local z inside the tile");
+            }
+            assertEquals(java.util.Arrays.toString(abs.indices), java.util.Arrays.toString(loc.indices));
+        }
+    }
+
+    @Test void meshLocalStaysExactAtTheWorldBorderWhereAbsoluteFloatsAreNot() {
+        int tx = 1_874_999;                                     // x = 29,999,984 .. 30,000,000 at lod 0
+        LodTile t = tile(0, tx, -tx, (x, z) -> 70, (x, z) -> 1);
+        TerrainMesher.Mesh loc = TerrainMesher.meshLocal(t, PAL, 4);
+        assertEquals((double) tx * 16, loc.originX);
+        assertEquals(-(double) tx * 16, loc.originZ);
+        double maxLocal = 0;
+        for (int v = 0; v < loc.vertexCount(); v++) maxLocal = Math.max(maxLocal, Math.max(loc.positions[v * 3], loc.positions[v * 3 + 2]));
+        assertEquals((Object) 16.0, (Object) maxLocal);          // exactly 16: nothing was rounded
+        // the absolute mesh of the same tile is rounded to the float grid (2-block steps near 3e7): that is the bug meshLocal avoids
+        TerrainMesher.Mesh abs = TerrainMesher.mesh(t, PAL, 4);
+        double worst = 0;
+        for (int v = 0; v < abs.vertexCount(); v++) worst = Math.max(worst, Math.abs(abs.positions[v * 3] - Math.rint(abs.positions[v * 3] / 2) * 2));
+        assertTrue(worst < 1e-6, "absolute floats near 3e7 only land on multiples of 2");
+    }
 }

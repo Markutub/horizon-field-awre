@@ -1,5 +1,68 @@
 # PHASE_01 — Fabric Rendering Baseline
 
+## Session 18 result (read this first)
+
+**State: IMPLEMENTED IN SOURCE, PURE-JAVA PART VERIFIED, MINECRAFT PART NOT COMPILED AND NOT RUN.** The sandbox had no network (Maven/Fabric/Gradle unreachable, no Gradle installed, no Minecraft), so `gradle -p awre-fabric build` could not be attempted to completion. Nothing below claims terrain is visible in-game.
+
+### Definition of done
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| Fabric build against Minecraft 1.21.11 | **NOT VERIFIED** | No network and no `gradle` in the sandbox. `HorizonRenderer.java`, `AwreClientMod.java` only syntax-parse (`tools/ParseOnly.java`: 3 files, 0 errors). First CI `build` job is the real test. |
+| Terrain geometry submitted through the Minecraft renderer | **NOT VERIFIED** | `HorizonRenderer.render` issues the draw calls; never compiled/run. `submitted_draws` is only incremented after a pass completes without exception. |
+| Placement at positive, negative, large coordinates | **PASS (math only)** | `RenderCoreTest.cameraRelativePlacementIsPreciseAtNegativeAndHugeCoordinates` (cameras at +-29,999,984, 16,777,217), `TerrainMesherTest.meshLocal*` (tile at x=29,999,984 exact). Not verified on screen. |
+| Update when a tile revision changes | **PASS (planner level)** | `RenderCoreTest.aNewRevisionIsUploadedBeforeTheOldHandleIsFreed...` (new handle exists before old freed; failed upload keeps old mesh; failed revision not retried per frame). |
+| GPU resources released on tile drop / dimension change / disconnect / shutdown | **PASS (logic) / NOT VERIFIED (real GPU)** | `...dropOutOfRangeAndReleaseAllFreeEverythingExactlyOnce` (fake GPU throws on double free; uploads == frees). Wiring: DROP/out-of-range -> `MeshResidency.sync`; level identity change -> `planner.release()`; `DISCONNECT`/`JOIN` -> `renderer.releaseAll()`; `CLIENT_STOPPING` -> release + close. Real `GpuBuffer.close()` unverified. |
+| No LOD holes / double layers | **PASS (planner level)** | `...lodSwapNeverOpensAHoleOrDrawsTwoLayers...` with GPU uploads lagging 1 mesh/frame. This test found a real bug (ready child drawn on top of still-visible parent) which is fixed in `ClientHorizonView.select`. Skirts/crack hiding between neighbouring tiles of different LOD is as before and not visually checked. |
+| Existing pure-Java suites pass | **PASS** | core 71/71 (was 69), protocol 67/67, stream 32/32 (was 23). |
+| CI integration | **NOT RUN** | Needs a push. `tools/ci/integration.sh` gained informational G3 lines (gpu_uploaded / submitted_draws), not hard checks. |
+| In-game visual verification | **NOT VERIFIED** | See manual procedure below. |
+| Documentation | PASS | This file, STATUS, PHASES, AI_CONTEXT, HANDOFF updated. |
+
+### What was built
+
+- `TerrainMesher.meshLocal` + `Mesh.originX/originZ`: tile-local vertices (exact floats at any world coordinate). `ClientHorizonView` now builds these. `TerrainMesher.mesh` (absolute) unchanged.
+- `ClientHorizonView.candidateOrder()` / `select(ready)`: draw selection by GPU readiness, with parent-hides-only-when-4-children-ready and no-child-over-visible-ancestor rules.
+- `VertexPacker` (16-byte POSITION_COLOR vertices + int indices, baked directional shade), `CameraRelative` (double offset, float result), `MeshResidency` (upload/free/caps/revision swap), `HorizonDrawPlanner` (tick/frame/diagnostics). All pure Java in `awre-stream`; no Minecraft imports.
+- `awre-fabric`: `HorizonRenderer` (only class touching blaze3d) and wiring in `AwreClientMod`.
+- Bounds: 4096 resident meshes, 192 MiB, 8 uploads and 2 MiB per frame (`MeshResidency.Limits.defaults()`); farthest tiles are evicted first.
+- Log line `[AWRE] render: received= mesh_built= mesh_failed= gpu_uploaded= upload_failed= gpu_freed= gpu_resident= gpu_bytes= planned_draws= planned_tris= submitted_draws= submitted_frames=` every 5 s.
+
+### API-ASSUMPTIONs the first build will confirm or break (all in `HorizonRenderer` + one block in `AwreClientMod`)
+
+1. `RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)`, `.withLocation(String)`, `RenderPipelines.register` and shader name `core/position_color`.
+2. `RenderSystem.getDevice().createBuffer(Supplier<String>, int usage, ByteBuffer)`, `GpuBuffer.USAGE_VERTEX/USAGE_INDEX`.
+3. `getMainRenderTarget().getColorTextureView()/getDepthTextureView()`, `createCommandEncoder().createRenderPass(label, color, OptionalInt, depth, OptionalDouble)`.
+4. `RenderSystem.bindDefaultUniforms`, `getDynamicUniforms().writeTransform(Matrix4f, Vector4f, Vector3f, Matrix4f)`, uniform name `DynamicTransforms`.
+5. `RenderPass.setVertexBuffer/setIndexBuffer(buf, VertexFormat.IndexType.INT)/drawIndexed(baseVertex, firstIndex, count, instances)`.
+6. `net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN`, `ctx.positionMatrix()`, `gameRenderer.getMainCamera().position()`.
+7. `RenderSystem.isOnRenderThread()`.
+Fix compile errors one by one; if only the event/matrix names are wrong, change only the lambda in `AwreClientMod.onInitializeClient`.
+
+### Known limitations / risks (not hidden)
+
+- **Far plane**: the vanilla projection's far clip is likely much closer than the 16,384-block default view distance, so distant tiles may be clipped until a larger-far-plane projection is used. Next step after the build works.
+- Draws go in at `END_MAIN` (after translucents), no fog, no lighting, culling off, colours are approximate map colours (`BlockColors`). Water/leaf tops are opaque.
+- Dimension filter still uses the dimension of the last received tile; GPU meshes are released on `Minecraft.level` identity change.
+- Sodium/Iris/VulkanMod: not tested, no claim.
+- GPU uploads are synchronous on the render thread (bounded per frame).
+
+### Manual in-game test procedure
+
+1. Build: `gradle -p awre-fabric build --stacktrace`; Paper server with the AWRE plugin (`stream.source: synthetic` is enough), client with the jar, Fabric API 0.141.3+1.21.11.
+2. Client video settings: render distance 8. Join; wait for `handshake OK` and `store tiles=`.
+3. Expect `[AWRE] render:` with `gpu_uploaded>=1`, then `submitted_draws>0`. If `mesh_built>0` but `gpu_uploaded=0` the upload path failed; if `gpu_uploaded>0` but `submitted_draws=0` the pass failed (look for `draw failed`).
+4. Look beyond the vanilla fog edge: flat coloured terrain should be visible. Fly in all directions; check no flicker when tiles refine.
+5. Teleport to x=-5,000,000 and x=29,000,000 (needs the server to have stream data there; use `stream.source: synthetic`); terrain must not jitter.
+6. Change dimension / disconnect / quit: log must show release, `gpu_resident=0`.
+
+### Change log (session 18)
+Added: `VertexPacker`, `CameraRelative`, `MeshResidency`, `HorizonDrawPlanner`, `RenderCoreTest` (9 tests), `HorizonRenderer`, 2 mesher tests. Changed: `TerrainMesher` (+meshLocal), `ClientHorizonView` (local meshes, `select`, `candidateOrder`), `AwreClientMod` (renderer wiring), `tools/ci/integration.sh` (info lines), `fabric.mod.json` text. Wire protocol, tile format and persistence: unchanged.
+
+---
+
+## Original phase brief
+
 ## Goal
 
 Connect the existing pure-Java terrain mesh pipeline to Minecraft 1.21.11's actual Fabric world-render lifecycle so streamed AWRE terrain is visible in-game.

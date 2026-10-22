@@ -32,7 +32,8 @@ import java.util.function.Predicate;
  * <li>meshes are built on ONE background thread, nearest first, at most {@code maxInFlight} queued at a time, so the render thread
  *     never decodes or meshes; a tile whose revision changed keeps drawing its old mesh until the new one is ready (no flicker).</li>
  * </ul>
- * Meshes are in absolute world coordinates (see {@link TerrainMesher}); the renderer subtracts the camera position.
+ * Meshes are tile-local ({@link TerrainMesher#meshLocal}: positions relative to {@code mesh.originX/originZ}); the renderer adds
+ * (origin - camera) in double precision per tile, so very large and negative world coordinates keep full float precision.
  * The renderer compares {@link Drawable#revision()} with what it uploaded to know when to re-upload, and frees buffers of keys that
  * left the list.
  */
@@ -68,6 +69,9 @@ public final class ClientHorizonView implements AutoCloseable {
     private final Set<TileKey> inFlight = ConcurrentHashMap.newKeySet();
     private final AtomicLong builtCount = new AtomicLong(), failureCount = new AtomicLong();
     private volatile Stats stats = new Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    // last update() parameters, for select(); client thread only
+    private List<Box> lastOrder = List.of();
+    private double lastCamX, lastCamZ, lastVanilla, lastMaxDistance;
 
     public ClientHorizonView(ClientSession session, int maxMeshes) { this(TileSource.of(session), maxMeshes, 4); }
 
@@ -130,6 +134,7 @@ public final class ClientHorizonView implements AutoCloseable {
         // 1. schedule builds, nearest first
         List<Box> order = new ArrayList<>(cand.values());
         order.sort(Comparator.comparingDouble(b -> b.dist));
+        lastOrder = order; lastCamX = camX; lastCamZ = camZ; lastVanilla = vanillaRadius; lastMaxDistance = maxDistance;
         for (Box b : order) {
             if (inFlight.size() >= maxInFlight) break;
             TileKey k = b.key;
@@ -160,7 +165,7 @@ public final class ClientHorizonView implements AutoCloseable {
             Built m = built.get(b.key);
             if (m == null) continue;
             ready++;
-            if (covered(b.key, camX, camZ, vanillaRadius, maxDistance, memo)) { hiddenFiner++; continue; }
+            if (covered(b.key, camX, camZ, vanillaRadius, maxDistance, memo, built::containsKey)) { hiddenFiner++; continue; }
             out.add(new Drawable(b.key, m.revision(), m.mesh()));
             tris += m.mesh().triangleCount();
         }
@@ -168,7 +173,46 @@ public final class ClientHorizonView implements AutoCloseable {
         return out;                                  // already nearest first (order is sorted and filtered in place)
     }
 
-    private boolean covered(TileKey k, double cx, double cz, double vr, double maxD, Map<TileKey, Boolean> memo) {
+    /** Nearest-first keys of the tiles that were candidates (held, in this dimension, outside vanilla, within range) at the last {@link #update}. */
+    public List<TileKey> candidateOrder() {
+        List<TileKey> r = new ArrayList<>(lastOrder.size());
+        for (Box b : lastOrder) r.add(b.key);
+        return r;
+    }
+
+    /**
+     * Which candidate tiles to DRAW right now, given which tiles a renderer can actually draw ({@code ready}, e.g. "uploaded to the GPU").
+     * Same coverage rule as {@link #update} but with GPU readiness instead of CPU readiness: a coarse tile stays visible until all four
+     * children are ready, and a tile that is not ready is never drawn, so an upload that lags behind the CPU mesh cannot open a hole
+     * or draw two layers. Nearest first. Call on the client thread after {@link #update}.
+     */
+    public List<TileKey> select(Predicate<TileKey> ready) {
+        Map<TileKey, Boolean> memo = new HashMap<>();
+        // coarse first, so that "an ancestor is already drawn" is known when its descendants are looked at
+        List<Box> coarseFirst = new ArrayList<>(lastOrder);
+        coarseFirst.sort(Comparator.comparingInt((Box b) -> b.key.lod()).reversed());
+        Set<TileKey> drawn = new HashSet<>();
+        for (Box b : coarseFirst) {
+            if (!ready.test(b.key)) continue;
+            if (covered(b.key, lastCamX, lastCamZ, lastVanilla, lastMaxDistance, memo, ready)) continue;
+            if (ancestorDrawn(b.key, drawn)) continue;      // a coarse tile still shows because some sibling is not ready: no second layer on top of it
+            drawn.add(b.key);
+        }
+        List<TileKey> out = new ArrayList<>(drawn.size());
+        for (Box b : lastOrder) if (drawn.contains(b.key)) out.add(b.key);   // nearest first
+        return out;
+    }
+
+    private static boolean ancestorDrawn(TileKey k, Set<TileKey> drawn) {
+        int tx = k.tileX(), tz = k.tileZ();
+        for (int lod = k.lod() + 1; lod <= 24; lod++) {
+            tx = Math.floorDiv(tx, 2); tz = Math.floorDiv(tz, 2);
+            if (drawn.contains(new TileKey(k.worldMsb(), k.worldLsb(), k.dimension(), tx, tz, lod))) return true;
+        }
+        return false;
+    }
+
+    private boolean covered(TileKey k, double cx, double cz, double vr, double maxD, Map<TileKey, Boolean> memo, Predicate<TileKey> ready) {
         if (k.lod() == 0) return false;
         Boolean known = memo.get(k);
         if (known != null) return known;
@@ -178,8 +222,8 @@ public final class ClientHorizonView implements AutoCloseable {
             Box b = new Box(c);
             if (vr > 0 && b.insideSquare(cx, cz, vr)) continue;                    // vanilla draws it
             b.measure(cx, cz);
-            boolean drawn = b.dist <= maxD && built.containsKey(c);
-            if (!drawn && !covered(c, cx, cz, vr, maxD, memo)) all = false;
+            boolean drawn = b.dist <= maxD && ready.test(c);
+            if (!drawn && !covered(c, cx, cz, vr, maxD, memo, ready)) all = false;
         }
         memo.put(k, all);
         return all;
@@ -189,7 +233,7 @@ public final class ClientHorizonView implements AutoCloseable {
         try {
             LodTile tile = LodTileCodec.decode(new LodKey(key.lod(), key.tileX(), key.tileZ()), rec.decoded());
             List<String> pal = source.palette(key);
-            TerrainMesher.Mesh m = TerrainMesher.mesh(tile, id -> id >= 0 && id < pal.size() ? pal.get(id) : "minecraft:air", Math.max(4, 2 << key.lod()));
+            TerrainMesher.Mesh m = TerrainMesher.meshLocal(tile, id -> id >= 0 && id < pal.size() ? pal.get(id) : "minecraft:air", Math.max(4, 2 << key.lod()));
             built.put(key, new Built(rec.revision(), m));
             failedAt.remove(key);
             builtCount.incrementAndGet();

@@ -19,8 +19,10 @@ public final class TerrainMesher {
         public final int[] colors;        // ARGB per vertex
         public final byte[] faces;        // Face ordinal per vertex
         public final int[] indices;       // 3 per triangle
+        /** World x/z (blocks) that must be ADDED to x/z of {@link #positions}. 0 for {@link #mesh} (absolute); the tile origin for {@link #meshLocal}. */
+        public final double originX, originZ;
 
-        Mesh(float[] p, int[] c, byte[] f, int[] i) { positions = p; colors = c; faces = f; indices = i; }
+        Mesh(float[] p, int[] c, byte[] f, int[] i, double ox, double oz) { positions = p; colors = c; faces = f; indices = i; originX = ox; originZ = oz; }
 
         public int vertexCount() { return colors.length; }
         public int triangleCount() { return indices.length / 3; }
@@ -57,16 +59,26 @@ public final class TerrainMesher {
             nv += 4;
         }
 
-        Mesh build() { return new Mesh(Arrays.copyOf(pos, nv * 3), Arrays.copyOf(col, nv), Arrays.copyOf(face, nv), Arrays.copyOf(idx, ni)); }
+        Mesh build(double originX, double originZ) { return new Mesh(Arrays.copyOf(pos, nv * 3), Arrays.copyOf(col, nv), Arrays.copyOf(face, nv), Arrays.copyOf(idx, ni), originX, originZ); }
     }
 
     private TerrainMesher() { }
 
-    /** @param paletteKey material id -> block key (e.g. the client's palette); @param skirtDepth blocks the skirts hang down */
-    public static Mesh mesh(LodTile t, IntFunction<String> paletteKey, double skirtDepth) {
+    /** @param paletteKey material id -> block key (e.g. the client's palette); @param skirtDepth blocks the skirts hang down. Positions are ABSOLUTE world coordinates (float: exact only below 2^24 blocks). */
+    public static Mesh mesh(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, false); }
+
+    /**
+     * Same geometry, but x/z are relative to the tile's world origin ({@link Mesh#originX}/{@link Mesh#originZ}, kept as doubles).
+     * Local values are multiples of 2^lod below 16*2^lod, so they are exact in float at any world coordinate; a renderer adds
+     * (origin - camera) in double precision per tile. Use this for GPU upload.
+     */
+    public static Mesh meshLocal(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, true); }
+
+    private static Mesh build(LodTile t, IntFunction<String> paletteKey, double skirtDepth, boolean local) {
         final int n = LodTile.SIDE;
         final double cell = 1 << t.key().lod();
-        final double ox = (double) t.key().tx() * n * cell, oz = (double) t.key().tz() * n * cell;
+        final double tileX = (double) t.key().tx() * n * cell, tileZ = (double) t.key().tz() * n * cell;
+        final double ox = local ? 0 : tileX, oz = local ? 0 : tileZ;
         int[] top = new int[n * n], color = new int[n * n];
         boolean[] valid = new boolean[n * n];
         java.util.HashMap<Integer, Integer> cache = new java.util.HashMap<>();
@@ -120,7 +132,7 @@ public final class TerrainMesher {
                 }
             }
         }
-        return b.build();
+        return b.build(local ? tileX : 0, local ? tileZ : 0);
     }
 
     private static boolean same(boolean[] valid, int[] top, int[] color, boolean[] used, int a, int b) {

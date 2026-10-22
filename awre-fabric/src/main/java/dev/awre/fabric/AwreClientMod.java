@@ -6,6 +6,7 @@ import dev.awre.protocol.Counters;
 import dev.awre.protocol.Limits;
 import dev.awre.protocol.TileKey;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -14,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * G0 client: negotiates the awre:main protocol after joining a server and verifies one test tile. Renders nothing.
+ * G0 client plus the PHASE_01 render hook: negotiates awre:main, meshes tiles in the background, uploads/draws them through HorizonRenderer (NOT compiled yet).
  * Everything protocol-related lives in the pure-Java ClientSession (unit tested); this class only wires Fabric events.
  * Test hooks (JVM properties): -Dawre.test.minVersion=2 -Dawre.test.maxVersion=3 forces an incompatible client.
  */
@@ -27,6 +28,9 @@ public final class AwreClientMod implements ClientModInitializer {
     private final Counters counters = new Counters();
     private ClientSession session;
     private dev.awre.stream.ClientHorizonView view;
+    private final HorizonRenderer renderer = new HorizonRenderer();
+    private dev.awre.stream.HorizonDrawPlanner<HorizonRenderer.GpuMesh> planner;
+    private Object lastLevel;                         // identity of Minecraft.level: changes on dimension change / respawn / disconnect
     private int ticksSinceViewUpdate, ticksSinceViewLog;
     private String lastViewLog = "";
     // distance (blocks) beyond which held tiles are not drawn; -Dawre.view.maxDistance=... to change
@@ -44,6 +48,13 @@ public final class AwreClientMod implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> onJoin());
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> onDisconnect());
         ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); if (planner != null) planner.close(); planner = null; });
+        // API-ASSUMPTION: Fabric API 0.141.3 WorldRenderEvents.END_MAIN with a context offering the camera and view matrix (see HorizonRenderer).
+        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN.register(ctx -> {
+            var mc = net.minecraft.client.Minecraft.getInstance();
+            var cam = mc.gameRenderer.getMainCamera().position();
+            renderer.render(new org.joml.Matrix4f(ctx.positionMatrix()), cam.x, cam.y, cam.z);
+        });
         LOG.info("[AWRE] client G0 loaded; protocol v{}..v{}, channel {}", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX, Awre.CHANNEL);
     }
 
@@ -52,8 +63,12 @@ public final class AwreClientMod implements ClientModInitializer {
         int max = Integer.getInteger("awre.test.maxVersion", Awre.PROTOCOL_MAX);
         session = new ClientSession(limits, counters, MOD_VERSION, min, max);
         session.setPayloadValidator(dev.awre.stream.TerrainPayloads.ANY);   // G0/G1 test tiles or terrain tiles
-        if (view != null) view.close();
-        view = new dev.awre.stream.ClientHorizonView(session, 4096);        // meshes are built on a background thread; nothing is drawn yet
+        renderer.releaseAll();
+        if (planner != null) planner.close();
+        view = new dev.awre.stream.ClientHorizonView(session, 4096);        // meshes are built on a background thread
+        planner = new dev.awre.stream.HorizonDrawPlanner<>(view, new dev.awre.stream.MeshResidency<>(renderer, dev.awre.stream.MeshResidency.Limits.defaults()));
+        renderer.setPlanner(planner);
+        lastLevel = null;
         sinceJoin = 0;
         lastLogged = ClientSession.State.IDLE;
         lastTileLogged = null;
@@ -64,7 +79,10 @@ public final class AwreClientMod implements ClientModInitializer {
         if (session != null) LOG.info("[AWRE] disconnected; final state {} ({}), tiles held {}, counters {}",
                 session.state(), session.reason(), session.tileCount(), counters.snapshot());
         session = null;
-        if (view != null) { view.close(); view = null; }
+        renderer.releaseAll();                                              // GPU meshes first, then the CPU side
+        if (planner != null) { planner.close(); planner = null; }           // closes the view too
+        view = null;
+        renderer.setPlanner(null);
         sinceJoin = -1;
     }
 
@@ -88,15 +106,20 @@ public final class AwreClientMod implements ClientModInitializer {
         }
     }
 
-    /** 10 Hz: decide which held tiles would be drawn (a GPU renderer will consume this list; today it is only counted and logged). */
+    /** 10 Hz: decide which held tiles would be drawn (HorizonDrawPlanner consumes it; HorizonRenderer draws it). */
     private void updateView(net.minecraft.client.Minecraft client) {
         dev.awre.stream.ClientHorizonView v = view;
-        if (v == null || session.state() != ClientSession.State.ACTIVE || client.player == null) return;
+        var pl = planner;
+        if (v == null || pl == null || session.state() != ClientSession.State.ACTIVE || client.player == null) return;
+        if (lastLevel != client.level) {                                    // dimension change / respawn: drop every GPU mesh of the old level
+            if (lastLevel != null) { LOG.info("[AWRE] level changed: releasing GPU meshes"); pl.release(); }
+            lastLevel = client.level;
+        }
         if (++ticksSinceViewUpdate >= 2) {
             ticksSinceViewUpdate = 0;
             TileKey last = session.lastTile();
             double vanilla = client.options.renderDistance().get() * 16.0;
-            v.update(client.player.getX(), client.player.getZ(), vanilla, viewMaxDistance,
+            pl.tick(client.player.getX(), client.player.getZ(), vanilla, viewMaxDistance,
                     last == null ? null : k -> k.dimension().equals(last.dimension()));
         }
         if (++ticksSinceViewLog >= 100) {                      // every 5 s, only when it changed
@@ -106,6 +129,7 @@ public final class AwreClientMod implements ClientModInitializer {
                     + " hidden_vanilla=" + s.hiddenByVanilla() + " hidden_finer=" + s.hiddenByFiner() + " too_far=" + s.tooFar()
                     + " tris=" + s.triangles() + " pending=" + s.pending() + " failures=" + s.failures();
             if (!line.equals(lastViewLog)) { lastViewLog = line; LOG.info("[AWRE] horizon view: {}", line); }
+            LOG.info("[AWRE] render: {}", pl.diagnosticsLine());
         }
     }
 

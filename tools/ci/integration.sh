@@ -116,6 +116,11 @@ check "G1 client strikes stayed 0"                    "$OUT/clientA.log" 'store 
 wait_for "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*' 120 || echo "client A: no meshed tiles seen within timeout"
 check "G2 client built meshes from streamed tiles"    "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*'
 check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizon view: .* failures=0'
+# PHASE_01 render stages: informational only (a headless CI client may never reach the world-render event). Read these lines first
+# when diagnosing: received -> mesh_built -> gpu_uploaded -> submitted_draws. Only submitted_draws>0 means the renderer issued draws.
+if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
+if grep -Eq '\[AWRE\] render: .*submitted_draws=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) draw calls submitted"; else echo "INFO: G3 no submitted draws logged"; fi
+grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
 if grep -Eq 'Exception|Caused by' "$OUT/clientA.log"; then
   grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null && fail "AWRE-related exception/rejection in client log" || pass "no AWRE exceptions in client log (unrelated exceptions may exist)"
 else pass "no exceptions in client log"; fi

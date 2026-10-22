@@ -1,12 +1,12 @@
 # AI_CONTEXT — Horizon Field / AWRE
 
-Last verified: 2026-10-21, uploaded `horizon-field-awre-session16.zip` snapshot; pure-Java verification scripts run locally in this session. No Git commit SHA or current remote CI result was available in the snapshot.
+Last verified: 2026-10-22 (Session 18) on the uploaded session-17 docs ZIP; core 71 / protocol 67 / stream 32 pure-Java tests pass; Gradle/Fabric/CI/in-game not run; pure-Java verification scripts run locally in this session. No Git commit SHA or current remote CI result was available in the snapshot.
 
 ## Purpose and current phase
 
 AWRE (Adaptive World Representation Engine) experiments with server-captured terrain summaries, versioned LOD tiles, bounded streaming, persistence, and an optional Fabric client renderer. The older `horizon-paper` / `horizon-core` Horizon Field prototype separately explores distant terrain for vanilla clients. These are related research paths but are **not the same delivery architecture**.
 
-Current phase: **PHASE_01 — Fabric terrain rendering baseline**. The pure-Java client view builds terrain meshes from streamed tiles and selects drawable tiles, but `awre-fabric` explicitly draws nothing. Implement and verify the smallest real render hook for Minecraft 1.21.11 before expanding the renderer.
+Current phase: **PHASE_01 — Fabric terrain rendering baseline** (Session 18: render path written; pure-Java part tested; `HorizonRenderer` NOT compiled/run — first CI `build` job decides). The pure-Java client view builds terrain meshes from streamed tiles and selects drawable tiles, but `awre-fabric` explicitly draws nothing. Implement and verify the smallest real render hook for Minecraft 1.21.11 before expanding the renderer.
 
 ## Target versions and builds
 
@@ -18,7 +18,7 @@ Current phase: **PHASE_01 — Fabric terrain rendering baseline**. The pure-Java
 
 ## Actual high-level data flow
 
-Paper (`awre-paper`) captures eligible already-loaded chunk snapshots → `ChunkIngest` / `TerrainStore` creates revisioned `LodTile`s and palettes → `TerrainPersistence` writes versioned `.hfl` logs → `PlayerStreamer` / `StreamScheduler` sends bounded, prioritized tile payloads over `awre:main` → `ClientSession` validates protocol/payload/revision → `ClientHorizonView` asynchronously meshes selected tiles and handles coverage → **render adapter missing**.
+Paper (`awre-paper`) captures eligible already-loaded chunk snapshots → `ChunkIngest` / `TerrainStore` creates revisioned `LodTile`s and palettes → `TerrainPersistence` writes versioned `.hfl` logs → `PlayerStreamer` / `StreamScheduler` sends bounded, prioritized tile payloads over `awre:main` → `ClientSession` validates protocol/payload/revision → `ClientHorizonView` asynchronously meshes selected tiles (tile-local meshes) → `HorizonDrawPlanner` (uploads via `MeshResidency`, draw selection, camera offsets) → `HorizonRenderer` (only Minecraft GPU code, unverified).
 
 The separate legacy path (`horizon-paper`) captures loaded chunks into `ColumnTile` summaries, stores a `TileLog`, builds a `HeightPyramid`, and runs `VisibilitySweep`; `DeliveryChannel` is an interface and does not prove distant rendering.
 

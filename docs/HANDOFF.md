@@ -1,5 +1,10 @@
 # HANDOFF — read this first (for the next AI / developer)
 
+## Session 18 addendum (LATEST) — PHASE_01 render path
+Sandbox had no network: only pure-Java verification. Delivered: tile-local meshes (`TerrainMesher.meshLocal`), `VertexPacker`, `CameraRelative`, `MeshResidency`, `HorizonDrawPlanner`, `ClientHorizonView.select/candidateOrder`, `HorizonRenderer` + wiring in `AwreClientMod`, 11 new tests (core 71, stream 32, protocol 67 all pass). A new test found and fixed a real double-layer bug in coverage selection.
+NOT done / unknown: Gradle build of `awre-fabric` (HorizonRenderer uses blaze3d names from memory, 7 listed API-ASSUMPTIONs in docs/phases/PHASE_01.md), CI run, in-game visibility, far-plane clipping of distant tiles.
+Next: (1) push and read the `build` job; fix HorizonRenderer/AwreClientMod compile errors only; (2) run the manual procedure in PHASE_01.md and the `[AWRE] render:` log line; (3) if terrain is clipped, give the draw pass a projection with a larger far plane; (4) then PHASE_02.
+
 ## Session 16 addendum (LATEST)
 CI (user report, run #9 on GitHub, "full green"): all four jobs passed, i.e. Session 14's fix is confirmed. (Whether Session 15's compaction/codec-v2 were already in that run is unknown to the author.)
 Delivered (offline, sandbox core 69/69, stream 23/23, protocol 67/67, Fabric syntax-parsed only): **client horizon view**, the pure-Java half of the Fabric render hook (docs/AWRE_G1_FEATURES.md 7e).

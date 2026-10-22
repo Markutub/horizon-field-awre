@@ -16,11 +16,15 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Streaming planner / ingest / client view / persistence glue | `awre-stream/src/main/java/dev/awre/stream/` | `tools/verify-stream.sh`; 23 tests passed in this session | Implemented; pure-Java verified |
 | Paper capture and terrain persistence | `awre-paper/src/main/java/dev/awre/paper/` | `.github/workflows/ci.yml`, `tools/ci/integration.sh` contain integration checks; no CI run executed in this session | Implemented in source; runtime status not re-verified here |
 | Fabric networking and tile meshing selection | `awre-fabric/src/main/java/dev/awre/fabric/AwreClientMod.java`; `ClientHorizonView` in `awre-stream` | Session 16 handoff describes G2 log checks; local script does not compile against Minecraft/Fabric APIs | Partial; source-only in this session |
-| Actual AWRE GPU/world rendering | No render adapter found in `awre-fabric` source snapshot; `AwreClientMod` says it renders nothing | No in-game rendering test | Missing; next task |
+| Actual AWRE GPU/world rendering | Session 18: `HorizonRenderer` (blaze3d calls) + pure-Java `HorizonDrawPlanner`/`MeshResidency`/`VertexPacker`/`CameraRelative` | Planner/residency/precision/LOD-swap: `RenderCoreTest` (9) + 2 mesher tests, pass. `HorizonRenderer`: syntax-parsed only | Written, **not compiled, not run in-game** |
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
-## Completed in this work session
+## Session 18 (PHASE_01) summary
+
+Render path implemented in source; see `docs/phases/PHASE_01.md` for the PASS/FAIL/NOT VERIFIED table and the list of API assumptions. Pure-Java: core 71/71, protocol 67/67, stream 32/32. Fabric/Gradle build, CI integration and in-game rendering: NOT RUN (no network in the sandbox). Next: push, read the `build` job, fix `HorizonRenderer` compile errors, then run the manual procedure and check the far-plane clipping limitation.
+
+## Completed in the earlier documentation session (Session 17)
 
 - Added this status map and the concise AI context entry point.
 - Added architecture overview/decisions, development commands, roadmap, and phase handoff documents.
