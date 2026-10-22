@@ -148,8 +148,7 @@ final class AwreStreaming {
     void attach(Player p, ServerSession s, AwreConfig c) {
         this.cfg = c;
         World w = p.getWorld();
-        String dim = w.getName();
-        if (dim.length() > Awre.MAX_DIMENSION_CHARS) dim = dim.substring(0, Awre.MAX_DIMENSION_CHARS);
+        String dim = AwreChannel.wireDimension(w);
         UUID wid = w.getUID();
         AwreWorldTerrain t = terrainFor(w);
         StreamConfig sc = new StreamConfig(c.streamRadius(), c.streamBytesPerSecond(), 65_536, 0.1, c.streamMaxHeldTiles(), 16, 256, 3);

@@ -104,11 +104,21 @@ public final class AwreChannel implements PluginMessageListener, Listener {
         }
     }
 
+    /**
+     * The dimension id put on the wire: the namespaced world key (e.g. "minecraft:overworld", "minecraft:the_nether"), NOT the Bukkit
+     * world name ("world", "world_nether"). The client only knows its level's ResourceKey, and DimensionGate compares against it, so a
+     * name here made every tile look like it belonged to another dimension (G2: candidates=0, no mesh ever built).
+     */
+    static String wireDimension(World w) {
+        String d = w.getKey().toString();
+        return d.length() > Awre.MAX_DIMENSION_CHARS ? d.substring(0, Awre.MAX_DIMENSION_CHARS) : d;
+    }
+
     /** Sends one deterministic test tile for the player's current chunk. */
     public ServerSession.SendResult sendTestTile(Player player, ServerSession s) {
         World w = player.getWorld();
         UUID u = w.getUID();
-        String dim = w.getName().length() > Awre.MAX_DIMENSION_CHARS ? w.getName().substring(0, Awre.MAX_DIMENSION_CHARS) : w.getName();
+        String dim = wireDimension(w);
         int tx = player.getLocation().getBlockX() >> 4, tz = player.getLocation().getBlockZ() >> 4;
         ServerSession.TileSend r = s.buildTestTile(u.getMostSignificantBits(), u.getLeastSignificantBits(), dim, tx, tz, 0,
                 revisionCounter.getAndIncrement(), Provenance.AUTHORITATIVE);
@@ -120,7 +130,7 @@ public final class AwreChannel implements PluginMessageListener, Listener {
     public ServerSession.TileFrames sendNoiseTile(Player player, ServerSession s, int side) {
         World w = player.getWorld();
         UUID u = w.getUID();
-        String dim = w.getName().length() > Awre.MAX_DIMENSION_CHARS ? w.getName().substring(0, Awre.MAX_DIMENSION_CHARS) : w.getName();
+        String dim = wireDimension(w);
         int tx = player.getLocation().getBlockX() >> 4, tz = player.getLocation().getBlockZ() >> 4;
         ServerSession.TileFrames r = s.sendTestTile(u.getMostSignificantBits(), u.getLeastSignificantBits(), dim, tx, tz, 1, // lod 1: a different TileKey than the G0 test tile, so the client logs both
                 revisionCounter.getAndIncrement(), Provenance.AUTHORITATIVE, side);
