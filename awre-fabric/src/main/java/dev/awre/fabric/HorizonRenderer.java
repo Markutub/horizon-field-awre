@@ -88,36 +88,44 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
         if (p == null) return;
         List<HorizonDrawPlanner.Draw<GpuMesh>> draws = p.frame(camX, camY, camZ);   // bounded uploads happen in here
         if (draws.isEmpty()) return;
-        Minecraft mc = Minecraft.getInstance();
         int submitted = 0;
-        String stage = "getMainRenderTarget";   // the call in progress, so a failure says WHICH API assumption was wrong
-        // API-ASSUMPTION: main render target exposes color/depth texture views; CommandEncoder.createRenderPass(label, color, clear, depth, clearDepth).
-        var target = mc.getMainRenderTarget();
+        String stage = "writeTransform";        // the call in progress, so a failure says WHICH API assumption was wrong
         try {
-            stage = "createRenderPass";
-            RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty());
-            try (pass) {
-            stage = "setPipeline";
-            pass.setPipeline(PIPELINE);
-            // API-ASSUMPTION: bindDefaultUniforms(pass) binds Projection/Fog/Globals; DynamicUniforms.writeTransform(modelView, colour, modelOffset, texMatrix).
-            stage = "bindDefaultUniforms";
-            RenderSystem.bindDefaultUniforms(pass);
+            // CI-confirmed (run 22): writing a dynamic uniform is an encoder command and is refused while a render pass is open
+            // ("Close the existing render pass before performing additional commands"). So every per-draw uniform is written FIRST;
+            // the pass only binds the already-written slices. The lambdas capture the slice, so its type is never named here.
+            // API-ASSUMPTION: DynamicUniforms.writeTransform(modelView, colour, modelOffset, texMatrix).
+            List<java.util.function.Consumer<RenderPass>> uniformBinders = new java.util.ArrayList<>(draws.size());
             for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {
-                stage = "writeTransform";
                 var slice = RenderSystem.getDynamicUniforms().writeTransform(
                         viewMatrix, new Vector4f(1, 1, 1, 1), new Vector3f(d.offX(), d.offY(), d.offZ()), new Matrix4f());
-                stage = "setUniform";
-                pass.setUniform("DynamicTransforms", slice);
-                stage = "setVertexBuffer";
-                pass.setVertexBuffer(0, d.handle().vertices());
-                stage = "setIndexBuffer";
-                pass.setIndexBuffer(d.handle().indices(), VertexFormat.IndexType.INT);
-                stage = "drawIndexed";
-                pass.drawIndexed(0, 0, d.indexCount(), 1);      // API-ASSUMPTION: (baseVertex, firstIndex, indexCount, instanceCount)
-                submitted++;
+                uniformBinders.add(pass -> pass.setUniform("DynamicTransforms", slice));
             }
-            stage = "closePass";
+            stage = "getMainRenderTarget";
+            // API-ASSUMPTION: main render target exposes color/depth texture views; CommandEncoder.createRenderPass(label, color, clear, depth, clearDepth).
+            var target = Minecraft.getInstance().getMainRenderTarget();
+            stage = "createRenderPass";
+            RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                    () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty());
+            try (pass) {
+                stage = "setPipeline";
+                pass.setPipeline(PIPELINE);
+                // API-ASSUMPTION: bindDefaultUniforms(pass) binds Projection/Fog/Globals.
+                stage = "bindDefaultUniforms";
+                RenderSystem.bindDefaultUniforms(pass);
+                int i = 0;
+                for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {
+                    stage = "setUniform";
+                    uniformBinders.get(i++).accept(pass);
+                    stage = "setVertexBuffer";
+                    pass.setVertexBuffer(0, d.handle().vertices());
+                    stage = "setIndexBuffer";
+                    pass.setIndexBuffer(d.handle().indices(), VertexFormat.IndexType.INT);
+                    stage = "drawIndexed";
+                    pass.drawIndexed(0, 0, d.indexCount(), 1);      // API-ASSUMPTION: (baseVertex, firstIndex, indexCount, instanceCount)
+                    submitted++;
+                }
+                stage = "closePass";
             }
         } catch (RuntimeException e) {
             // full stack trace for the first failures: the CI log must show the real cause, not just the exception class
