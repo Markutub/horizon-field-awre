@@ -33,6 +33,11 @@ jobs:
       - run: bash tools/verify-awre.sh
       - run: bash tools/verify-stream.sh
       - run: bash tools/ci/render-gate-test.sh
+      - name: Reference frames (CPU geometry check of the real LOD plan + meshes; not an in-game render)
+        run: bash tools/preview/run-reference-frame.sh reference-frames
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reference-frames, path: reference-frames/*.png, if-no-files-found: warn }
 
   build:
     name: Build Paper plugins + Fabric mod

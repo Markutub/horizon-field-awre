@@ -256,4 +256,60 @@ class StreamLoopTest {
     @Test void nonPositiveCooldownIsRejected() {
         assertThrows(IllegalArgumentException.class, () -> new PlayerStreamer(server, store, palette, new LodPlanner(model), StreamConfig.defaults(), MSB, LSB, DIM, clock::get, 0));
     }
+
+    // ---- PHASE regression: vanilla clients, reconnects, corrupt tiles -------------------------------------------------------
+
+    @Test void aVanillaClientThatNeverHandshakesGetsNoAwreFramesAndNoState() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        // no client.start(): the server session stays NEW, exactly like a vanilla client that ignores the plugin channel
+        PlayerStreamer s = new PlayerStreamer(server, store, palette, new LodPlanner(model), cfg(300, 4096), MSB, LSB, DIM, clock::get);
+        for (int i = 0; i < 300; i++) {
+            clock.addAndGet(50_000_000L);
+            assertTrue(s.tick(0, 0, 0).isEmpty(), "tick " + i + ": a non-AWRE client must receive nothing");
+        }
+        assertTrue(server.state() != ServerSession.State.ACTIVE);
+        assertEquals(0, s.stats().sent()); assertEquals(0, s.stats().wireBytes());
+        assertEquals(0, s.stats().pending(), "nothing may be queued for a client that never negotiated");
+    }
+
+    @Test void aReconnectedClientGetsEverythingAgainFromTheSameStoreWithoutStrikes() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        PlayerStreamer first = streamer(cfg(300, 4096));
+        for (int i = 0; i < 40; i++) step(first, 0, 0, 0);                  // disconnect part-way through delivery
+        assertTrue(client.tileCount() > 0 && client.tileCount() < first.plan().leaves().size(), "premise: delivery was partial");
+
+        // reconnect = brand new sessions + streamer over the SAME server-side store
+        Counters sc2 = new Counters(), cc2 = new Counters();
+        ServerSession server2 = new ServerSession(lim, clock::get, sc2, 78);
+        ClientSession client2 = new ClientSession(lim, cc2, "t", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX);
+        client2.setPayloadValidator(TerrainPayloads.TERRAIN);
+        class Wire {
+            void toServer(byte[] f) { for (byte[] r : server2.onFrame(f)) toClient(r); }
+            void toClient(byte[] f) { for (byte[] r : client2.onFrame(f)) toServer(r); }
+        }
+        Wire w2 = new Wire();
+        w2.toServer(client2.start());
+        assertEquals(ServerSession.State.ACTIVE, server2.state());
+        PlayerStreamer second = new PlayerStreamer(server2, store, palette, new LodPlanner(model), cfg(300, 4096), MSB, LSB, DIM, clock::get);
+        int ticks = 0;
+        do {
+            clock.addAndGet(50_000_000L);
+            for (byte[] f : second.tick(0, 0, 0)) w2.toClient(f);
+        } while (++ticks < 3000 && client2.tileCount() < second.plan().leaves().size());
+        assertEquals(second.plan().leaves().size(), client2.tileCount(), "the new session must receive the full plan again: " + second.stats());
+        assertEquals(0, client2.strikes());
+    }
+
+    @Test void aValidFrameWithACorruptTileBodyIsRejectedWithoutKillingTheSessionOrBlockingGoodTiles() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        PlayerStreamer s = streamer(cfg(300, 4096));
+        byte[] garbage = new byte[64]; new Random(9).nextBytes(garbage);
+        var bad = dev.awre.protocol.TileMessage.create(MSB, LSB, DIM, 5000, 5000, 0, 1, dev.awre.protocol.Provenance.AUTHORITATIVE, dev.awre.protocol.Encoding.RAW, garbage);
+        for (byte[] f : server.sendTile(bad).frames()) toClient(f);
+        assertEquals(0, client.tileCount(), "a corrupt body must never be stored");
+        assertTrue(server.state() != ServerSession.State.BLOCKED);
+        assertEquals(ServerSession.State.ACTIVE, server.state());
+        for (int i = 0; i < 600; i++) step(s, 0, 0, 0);                    // good tiles still flow afterwards
+        assertTrue(client.tileCount() > 0, "good tiles must still be accepted after a corrupt one");
+    }
 }

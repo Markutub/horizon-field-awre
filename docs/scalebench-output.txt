@@ -1,0 +1,7 @@
+# ScaleBench output (SYNTHETIC baseline, no thresholds)
+# 2026-10-22, Session 28, sandbox JVM (OpenJDK 21, -Xmx3g). Synthetic terrain is smoother than real terrain: bytes/memory are LOWER BOUNDS.
+# The 1,024-chunk row includes JIT warm-up (CPU us/tile and ingest rate are pessimistic there). Re-run on target hardware before using any number as a budget.
+N chunks | ingest ms (chunks/s) | store MiB (B/chunk) | leaves | tiles sent | wire MiB | stream CPU ms (us/tile) | client tiles | holes | strikes
+1,024 | 313 (3,268) | 0.2 (231) | 652 | 644 | 0.09 | 438 (681) | 644 | 0 | 0  [ticks=42]
+4,096 | 351 (11,662) | 1.6 (406) | 1,284 | 1,276 | 0.19 | 504 (395) | 1,276 | 0 | 0  [ticks=81]
+16,384 | 918 (17,844) | 6.8 (433) | 2,156 | 2,152 | 0.36 | 1778 (826) | 2,152 | 0 | 0  [ticks=136]

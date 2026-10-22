@@ -29,3 +29,6 @@ Sodium, Iris (with a shader pack), VulkanMod: repeat checks 1, 3, 4, 8. Folia, o
 
 ## Report template
 `date | commit | GPU/driver | checks passed/failed/not-run | screenshots | log excerpts | first failing check`
+
+## Related automated check (Session 28)
+`bash tools/preview/run-reference-frame.sh` renders CPU reference frames of the same LOD plan/meshes at origin, negative and large coordinates (CI uploads them as the `reference-frames` artifact). Compare your in-game screenshots with those frames: shape and LOD seams should agree. It does not replace any check above (no GPU, fog, lighting, biome tint or mod behaviour).

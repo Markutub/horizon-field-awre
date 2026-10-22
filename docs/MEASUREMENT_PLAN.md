@@ -18,3 +18,6 @@ It is appended to the existing capture line (`capture: requested= handled= retri
 
 ## Do not
 Tune `stream.revalidate-seconds` from synthetic benchmarks; force-load or generate chunks to reach the target count.
+
+## Synthetic baseline (Session 28)
+`docs/scalebench-output.txt` (`bash tools/bench/run-scalebench.sh`) gives a synthetic ingest/stream baseline at 1k/4k/16k chunks. It informs expectations only: it does not measure Paper main-thread cost and must not be used to tune `stream.revalidate-seconds`.
