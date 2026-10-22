@@ -1,6 +1,6 @@
 # AI_CONTEXT — Horizon Field / AWRE
 
-Last verified: 2026-10-22 (Session 18) on the uploaded session-17 docs ZIP; core 71 / protocol 67 / stream 32 pure-Java tests pass; Gradle/Fabric/CI/in-game not run; pure-Java verification scripts run locally in this session. No Git commit SHA or current remote CI result was available in the snapshot.
+Last verified: 2026-10-22 (Session 26, G1 audit) on git HEAD 1e03f0c plus the audit changes; pure-Java: core 93 / protocol 67 / stream 49 pass; Gradle/Fabric/CI/in-game NOT run. Audit and fixes: `docs/AUDIT_G1.md`.
 
 ## Purpose and current phase
 
@@ -27,6 +27,7 @@ The separate legacy path (`horizon-paper`) captures loaded chunks into `ColumnTi
 - Never force-load or generate chunks to fill a distant cache.
 - Do not access Bukkit/Paper world state asynchronously unless the API explicitly permits it; analyze immutable snapshots off-thread.
 - Server state is authoritative; unknown or predicted terrain must not be presented as confirmed capture.
+- Capture requests are never dropped: they go through `CaptureBacklog`, not a bare bounded queue (ADR-005).
 - Reject malformed/oversized payloads and stale revisions; bound queues, assemblies, caches, and in-flight work.
 - Keep Paper logic independent of Fabric rendering.
 - Vanilla-client compatibility is a separate, experimental path; AWRE's custom tile protocol requires the optional mod for custom geometry.

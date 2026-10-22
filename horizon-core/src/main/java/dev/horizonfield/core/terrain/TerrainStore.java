@@ -32,6 +32,7 @@ public final class TerrainStore {
     private final Map<Long, ColumnTile> chunks = new ConcurrentHashMap<>();
     private final Map<LodKey, Long> versions = new ConcurrentHashMap<>();
     private final AtomicLong clock = new AtomicLong(0);
+    private final AtomicLong columnBytes = new AtomicLong();   // approx heap held by the observed chunks (see ColumnTile#approxHeapBytes)
     private final Map<LodKey, Cached> cache;
 
     public TerrainStore(int maxLod, Reduce reduce, int cacheEntries) {
@@ -50,13 +51,17 @@ public final class TerrainStore {
         ColumnTile old = chunks.get(k);
         if (old != null && old.sameContent(t)) return versions.get(new LodKey(0, t.chunkX(), t.chunkZ()));
         long v = clock.incrementAndGet();
-        chunks.put(k, t);
+        ColumnTile prev = chunks.put(k, t);
+        columnBytes.addAndGet(t.approxHeapBytes() - (prev == null ? 0 : prev.approxHeapBytes()));
         LodKey n = new LodKey(0, t.chunkX(), t.chunkZ());
         for (int l = 0; l <= maxLod; l++) { versions.merge(n, v, Math::max); if (l < maxLod) n = n.parent(); }
         return v;
     }
 
     public int chunkCount() { return chunks.size(); }
+
+    /** Approximate heap bytes held by the observed chunks themselves (excludes the version index and the tile cache). For /awre stats. */
+    public long approxChunkBytes() { return columnBytes.get(); }
     public long version(LodKey k) { return k.lod() > maxLod ? 0 : versions.getOrDefault(k, 0L); }
 
     /** The tile and the version it was built at, as one consistent pair (null if there is no data below it). */

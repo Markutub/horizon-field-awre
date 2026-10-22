@@ -57,7 +57,7 @@ final class AwreStreaming {
     void start(AwreConfig c) {
         this.cfg = c;
         if (c.streamCaptured()) {
-            capture = new AwreCapture(plugin, this);
+            capture = new AwreCapture(plugin, this, c.revalidateSeconds());
             capture.start();
             // load every world's terrain (and replay its disk cache) now, not when the first chunk event or player happens to touch it
             plugin.getServer().getScheduler().runTask(plugin, () -> { for (World w : plugin.getServer().getWorlds()) terrainFor(w); });
@@ -162,6 +162,17 @@ final class AwreStreaming {
     PlayerStreamer.Stats stats(UUID id) { Entry e = entries.get(id); return e == null ? null : e.streamer.stats(); }
 
     /** Chunks held by the terrain this player streams from (0 if not attached). */
+    /** Approximate heap held by the observed chunks of the player's world (see TerrainStore#approxChunkBytes). */
+    long terrainChunkBytes(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.approxChunkBytes(); }
+
+    /** Capture backlog (requested / handled / retried / waiting / queued / peak waiting), or null when capture is off. */
+    String captureStats() {
+        AwreCapture c = capture;
+        if (c == null) return null;
+        var st = c.stats();
+        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting();
+    }
+
     int terrainChunks(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.chunkCount(); }
 
     private void tickAll() {

@@ -99,6 +99,7 @@ public final class BoundedTaskQueue<T> {
         return n;
     }
 
+    public synchronized boolean contains(Object key) { return byKey.containsKey(key); }
     public synchronized int size() { return byKey.size(); }
     public int capacity() { return capacity; }
 

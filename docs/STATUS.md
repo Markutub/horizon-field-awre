@@ -20,6 +20,10 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
+## Session 26 (G1 audit) summary
+
+Full report: `docs/AUDIT_G1.md`. Three confirmed defects fixed in source with regression tests: (D1) capture requests beyond the 4096-queue were silently lost (`CaptureBacklog`; premise test shows 665 of 4761 chunks lost); (D2) terrain changed by anything but player place/break was never re-observed (new event handlers + `stream.revalidate-seconds` sweep; pipeline test `RevalidationSweepTest`); (D3) server heap 1.32 KB/chunk unbounded growth, measured, now 0.43 KB/chunk via packed `ColumnTile`. Also E1: snapshots were taken without biome data. Pure-Java: core 93/93, protocol 67/67, stream 49/49. Paper/Fabric changes are syntax-checked only (CI is the compile check). Main-thread cost of capture/sweep UNMEASURED. Next: run CI, then measure on a real server (see AUDIT_G1 section 7).
+
 ## Session 21 (PHASE_03 start) summary
 
 Measured tile-border cracks on synthetic terrain (`tools/bench/CrackBench.java`, `docs/crackbench-output.txt`): fixed-depth skirts leave thousands of open border samples on mountainous terrain; fixed by skirts to the floor (`meshLocalToFloor`). core 73/73, protocol 67/67, stream 39/39. Not real-terrain data; not verified in game. See `docs/phases/PHASE_03.md`.

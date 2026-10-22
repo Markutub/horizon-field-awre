@@ -1,5 +1,8 @@
 # HANDOFF — read this first (for the next AI / developer)
 
+## Session 26 addendum (LATEST)
+G1 audit (`docs/AUDIT_G1.md`): fixed capture-request loss (`CaptureBacklog`), missing edit events + periodic sweep, packed `ColumnTile` (1.32 -> 0.43 KB/chunk measured), biome-aware snapshots. core 93 / protocol 67 / stream 49. Paper/Fabric syntax-checked only: push, read the `build` job, then measure on a real server. Next: AUDIT_G1 section 7.
+
 ## Session 21 addendum (LATEST) — PHASE_03 started while CI for the session-20 fix was pending
 Added CrackBench + floor skirts (docs/phases/PHASE_03.md). The Fabric build result of the session-20 `Camera#rotation()` fix was not available. Next: read that CI run first; then real-terrain CrackBench on a real `.hfl`.
 
@@ -14,7 +17,7 @@ Sandbox had no network: only pure-Java verification. Delivered: tile-local meshe
 NOT done / unknown: Gradle build of `awre-fabric` (HorizonRenderer uses blaze3d names from memory, 7 listed API-ASSUMPTIONs in docs/phases/PHASE_01.md), CI run, in-game visibility, far-plane clipping of distant tiles.
 Next: (1) push and read the `build` job; fix HorizonRenderer/AwreClientMod compile errors only; (2) run the manual procedure in PHASE_01.md and the `[AWRE] render:` log line; (3) if terrain is clipped, give the draw pass a projection with a larger far plane; (4) then PHASE_02.
 
-## Session 16 addendum (LATEST)
+## Session 16 addendum
 CI (user report, run #9 on GitHub, "full green"): all four jobs passed, i.e. Session 14's fix is confirmed. (Whether Session 15's compaction/codec-v2 were already in that run is unknown to the author.)
 Delivered (offline, sandbox core 69/69, stream 23/23, protocol 67/67, Fabric syntax-parsed only): **client horizon view**, the pure-Java half of the Fabric render hook (docs/AWRE_G1_FEATURES.md 7e).
 - `awre-stream/.../ClientHorizonView`: per `update(camX, camZ, vanillaRadius, maxDistance, worldFilter)` returns the tiles to draw, nearest first. Skips tiles fully inside vanilla's square or beyond maxDistance; hides a coarse tile only when its 4 children are drawable (or inside vanilla range), recursively, so no double layer and no hole; meshes built on ONE daemon thread (`awre-mesher`), nearest first, `maxInFlight` bounded; a new revision keeps the old mesh until ready; DROPped tiles vanish; corrupt payloads are not retried until a new revision; mesh cap evicts the farthest. Input is a small `TileSource` interface (adapter `TileSource.of(ClientSession)`), so tests use a fake store. 8 tests.

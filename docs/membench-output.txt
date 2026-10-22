@@ -1,0 +1,9 @@
+TerrainStore: 16,384 chunks -> 6.2 MiB heap = 398 B/chunk (maxLod=6, versions map included)
+  store-reported chunk bytes: 220 B/chunk (excludes version index)
+  extrapolation: 1,000,000 chunks (16,384 x 16,384 blocks) = 0.37 GiB
+TerrainStore: 65,536 chunks -> 26.7 MiB heap = 427 B/chunk (maxLod=6, versions map included)
+  store-reported chunk bytes: 221 B/chunk (excludes version index)
+  extrapolation: 1,000,000 chunks (16,384 x 16,384 blocks) = 0.40 GiB
+TerrainStore: 147,456 chunks -> 60.5 MiB heap = 430 B/chunk (maxLod=6, versions map included)
+  store-reported chunk bytes: 221 B/chunk (excludes version index)
+  extrapolation: 1,000,000 chunks (16,384 x 16,384 blocks) = 0.40 GiB

@@ -89,7 +89,9 @@ public final class AwreCommand implements CommandExecutor, TabCompleter {
             case "off" -> { st.detach(p.getUniqueId()); sender.sendMessage("stream off (the client keeps what it holds until it disconnects)"); }
             default -> {
                 var x = st.stats(p.getUniqueId());
-                sender.sendMessage("terrain chunks in memory: " + st.terrainChunks(p));
+                sender.sendMessage("terrain chunks in memory: " + st.terrainChunks(p) + " (about " + st.terrainChunkBytes(p) / 1024 + " KiB of chunk data, excluding the version index)");
+                String cs = st.captureStats();
+                if (cs != null) sender.sendMessage(cs);
                 sender.sendMessage(x == null ? "stream: not attached" : "stream: leaves=" + x.plannedLeaves() + " held=" + x.held() + " pending=" + x.pending() + " sent=" + x.sent()
                         + " wire=" + x.wireBytes() + "B holes=" + x.holes() + " noData=" + x.noData() + " dropped=" + x.dropped() + " failures=" + x.failures() + " replans=" + x.replans());
             }

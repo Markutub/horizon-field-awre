@@ -28,3 +28,8 @@ Fabric side: `AwreClientMod` now takes the dimension from `String.valueOf(client
 2. Disconnect and rejoin 3 times: `gpu_resident=0` after each disconnect.
 3. Edit terrain on the server (so a tile revision changes): the tile updates without a gap; `gpu_uploaded` increases by 1, `gpu_freed` by 1.
 4. Fly toward/away from a LOD boundary: no flicker, no z-fighting band.
+
+## Session 26 (audit) additions
+
+Capture side correctness, details and evidence in `docs/AUDIT_G1.md`: `CaptureBacklog` (no lost capture requests), more edit events plus `stream.revalidate-seconds`, biome-aware snapshots, packed `ColumnTile`. Pure-Java: core 93/93, protocol 67/67, stream 49/49. Not verified: Paper compile of the new handlers, main-thread cost, in-game behaviour. Open: ceilinged worlds (Nether), client store byte cap, tile blacklist after an edit.
+
