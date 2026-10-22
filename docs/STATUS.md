@@ -20,6 +20,10 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
+## Session 19 (PHASE_02) summary
+
+User reported "all green" (not independently visible). Added `DimensionGate` (fixes old-dimension meshes being re-uploaded after a dimension change), `WorldCorrectnessTest` (6 tests incl. a 400-iteration randomized, mutation-checked coverage property). Pure-Java: core 71/71, protocol 67/67, stream 38/38. Details and open items: `docs/phases/PHASE_02.md`.
+
 ## Session 18 (PHASE_01) summary
 
 Render path implemented in source; see `docs/phases/PHASE_01.md` for the PASS/FAIL/NOT VERIFIED table and the list of API assumptions. Pure-Java: core 71/71, protocol 67/67, stream 32/32. Fabric/Gradle build, CI integration and in-game rendering: NOT RUN (no network in the sandbox). Next: push, read the `build` job, fix `HorizonRenderer` compile errors, then run the manual procedure and check the far-plane clipping limitation.

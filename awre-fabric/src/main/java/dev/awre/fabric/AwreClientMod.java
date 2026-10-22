@@ -49,11 +49,14 @@ public final class AwreClientMod implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> onDisconnect());
         ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); if (planner != null) planner.close(); planner = null; });
-        // API-ASSUMPTION: Fabric API 0.141.3 WorldRenderEvents.END_MAIN with a context offering the camera and view matrix (see HorizonRenderer).
+        // CI-confirmed (session 18 build log): WorldRenderEvents.END_MAIN exists and Camera#position() compiles, but WorldRenderContext has NO
+        // positionMatrix(). The view matrix is therefore built from the camera rotation (world -> view, no translation: the translation is
+        // the per-draw offset). API-ASSUMPTION still open: Camera#rotation() returning a joml Quaternionf.
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN.register(ctx -> {
-            var mc = net.minecraft.client.Minecraft.getInstance();
-            var cam = mc.gameRenderer.getMainCamera().position();
-            renderer.render(new org.joml.Matrix4f(ctx.positionMatrix()), cam.x, cam.y, cam.z);
+            var camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
+            var cam = camera.position();
+            var view = new org.joml.Matrix4f().rotation(camera.rotation().conjugate(new org.joml.Quaternionf()));
+            renderer.render(view, cam.x, cam.y, cam.z);
         });
         LOG.info("[AWRE] client G0 loaded; protocol v{}..v{}, channel {}", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX, Awre.CHANNEL);
     }
@@ -117,10 +120,11 @@ public final class AwreClientMod implements ClientModInitializer {
         }
         if (++ticksSinceViewUpdate >= 2) {
             ticksSinceViewUpdate = 0;
-            TileKey last = session.lastTile();
             double vanilla = client.options.renderDistance().get() * 16.0;
+            // the level's own dimension wins; the last received tile is only a fallback (see DimensionGate)
+            String dim = client.level == null ? null : dev.awre.stream.DimensionGate.fromResourceKeyString(String.valueOf(client.level.dimension()));
             pl.tick(client.player.getX(), client.player.getZ(), vanilla, viewMaxDistance,
-                    last == null ? null : k -> k.dimension().equals(last.dimension()));
+                    dev.awre.stream.DimensionGate.filter(dim, session.lastTile()));
         }
         if (++ticksSinceViewLog >= 100) {                      // every 5 s, only when it changed
             ticksSinceViewLog = 0;

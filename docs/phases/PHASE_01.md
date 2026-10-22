@@ -8,7 +8,7 @@
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Fabric build against Minecraft 1.21.11 | **NOT VERIFIED** | No network and no `gradle` in the sandbox. `HorizonRenderer.java`, `AwreClientMod.java` only syntax-parse (`tools/ParseOnly.java`: 3 files, 0 errors). First CI `build` job is the real test. |
+| Fabric build against Minecraft 1.21.11 | **FAILED once in real CI (user-supplied log, session 18 code): 1 compile error, `ctx.positionMatrix()`; fixed in session 20, re-run NOT VERIFIED**. Original note: | No network and no `gradle` in the sandbox. `HorizonRenderer.java`, `AwreClientMod.java` only syntax-parse (`tools/ParseOnly.java`: 3 files, 0 errors). First CI `build` job is the real test. |
 | Terrain geometry submitted through the Minecraft renderer | **NOT VERIFIED** | `HorizonRenderer.render` issues the draw calls; never compiled/run. `submitted_draws` is only incremented after a pass completes without exception. |
 | Placement at positive, negative, large coordinates | **PASS (math only)** | `RenderCoreTest.cameraRelativePlacementIsPreciseAtNegativeAndHugeCoordinates` (cameras at +-29,999,984, 16,777,217), `TerrainMesherTest.meshLocal*` (tile at x=29,999,984 exact). Not verified on screen. |
 | Update when a tile revision changes | **PASS (planner level)** | `RenderCoreTest.aNewRevisionIsUploadedBeforeTheOldHandleIsFreed...` (new handle exists before old freed; failed upload keeps old mesh; failed revision not retried per frame). |
@@ -35,7 +35,7 @@
 3. `getMainRenderTarget().getColorTextureView()/getDepthTextureView()`, `createCommandEncoder().createRenderPass(label, color, OptionalInt, depth, OptionalDouble)`.
 4. `RenderSystem.bindDefaultUniforms`, `getDynamicUniforms().writeTransform(Matrix4f, Vector4f, Vector3f, Matrix4f)`, uniform name `DynamicTransforms`.
 5. `RenderPass.setVertexBuffer/setIndexBuffer(buf, VertexFormat.IndexType.INT)/drawIndexed(baseVertex, firstIndex, count, instances)`.
-6. `net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN`, `ctx.positionMatrix()`, `gameRenderer.getMainCamera().position()`.
+6. `WorldRenderEvents.END_MAIN` and `gameRenderer.getMainCamera().position()`: **CONFIRMED by the first real build (javac accepted them)**. `ctx.positionMatrix()`: **WRONG** (`cannot find symbol` in `WorldRenderContext`, the only compile error reported). Replaced in session 20 by a view matrix from `Camera#rotation()` (conjugate quaternion); `Camera#rotation()` is the new open assumption.
 7. `RenderSystem.isOnRenderThread()`.
 Fix compile errors one by one; if only the event/matrix names are wrong, change only the lambda in `AwreClientMod.onInitializeClient`.
 

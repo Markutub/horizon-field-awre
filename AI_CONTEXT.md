@@ -6,7 +6,7 @@ Last verified: 2026-10-22 (Session 18) on the uploaded session-17 docs ZIP; core
 
 AWRE (Adaptive World Representation Engine) experiments with server-captured terrain summaries, versioned LOD tiles, bounded streaming, persistence, and an optional Fabric client renderer. The older `horizon-paper` / `horizon-core` Horizon Field prototype separately explores distant terrain for vanilla clients. These are related research paths but are **not the same delivery architecture**.
 
-Current phase: **PHASE_01 — Fabric terrain rendering baseline** (Session 18: render path written; pure-Java part tested; `HorizonRenderer` NOT compiled/run — first CI `build` job decides). The pure-Java client view builds terrain meshes from streamed tiles and selects drawable tiles, but `awre-fabric` explicitly draws nothing. Implement and verify the smallest real render hook for Minecraft 1.21.11 before expanding the renderer.
+Current phase: **PHASE_02 (correctness; see docs/phases/PHASE_02.md; stream tests 38/38)** after PHASE_01 — Fabric terrain rendering baseline** (Session 18: render path written; pure-Java part tested; `HorizonRenderer` NOT compiled/run — first CI `build` job decides). The pure-Java client view builds terrain meshes from streamed tiles and selects drawable tiles, but `awre-fabric` explicitly draws nothing. Implement and verify the smallest real render hook for Minecraft 1.21.11 before expanding the renderer.
 
 ## Target versions and builds
 

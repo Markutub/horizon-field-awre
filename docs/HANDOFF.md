@@ -1,5 +1,11 @@
 # HANDOFF — read this first (for the next AI / developer)
 
+## Session 20 addendum (LATEST) — first real Fabric build result
+User supplied the CI log of `gradle -p awre-fabric build` on session 18 code: Loom 1.14.10, ONE error: `WorldRenderContext.positionMatrix()` does not exist (AwreClientMod:56). Everything else javac checked compiled. Fixed by building the view matrix from `Camera#rotation()`. Re-run CI; if the next error is in `HorizonRenderer` (blaze3d names), fix those one by one; the list is in PHASE_01.md. Loom warning "Cannot remap modifiers because it does not exists in any of the targets []" was in the log; it did not stop the build.
+
+## Session 19 addendum (LATEST) — PHASE_02 started
+User said CI was "all green" (unverified by me). Delivered: `DimensionGate` + wiring (real bug: old dimension re-uploaded after a dimension change), `WorldCorrectnessTest` (randomized coverage property, revisions, reconnects). Pure-Java 71/67/38 pass. Next: in-game checks in PHASE_02.md, far-plane clipping, then PHASE_03 (real-terrain fidelity) once visible output is confirmed.
+
 ## Session 18 addendum (LATEST) — PHASE_01 render path
 Sandbox had no network: only pure-Java verification. Delivered: tile-local meshes (`TerrainMesher.meshLocal`), `VertexPacker`, `CameraRelative`, `MeshResidency`, `HorizonDrawPlanner`, `ClientHorizonView.select/candidateOrder`, `HorizonRenderer` + wiring in `AwreClientMod`, 11 new tests (core 71, stream 32, protocol 67 all pass). A new test found and fixed a real double-layer bug in coverage selection.
 NOT done / unknown: Gradle build of `awre-fabric` (HorizonRenderer uses blaze3d names from memory, 7 listed API-ASSUMPTIONs in docs/phases/PHASE_01.md), CI run, in-game visibility, far-plane clipping of distant tiles.
