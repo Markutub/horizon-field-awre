@@ -165,6 +165,31 @@ class RenderCoreTest {
         assertEquals(gpu.uploads, gpu.frees, "every upload was freed exactly once");
     }
 
+    @Test void deferredFreeKeepsHandlesAliveForTheConfiguredFramesAndFlushClosesAll() {
+        Store s = new Store(); FakeGpu gpu = new FakeGpu();
+        s.put(0, 10, 0, 1, 64); s.put(0, 11, 0, 1, 64);
+        HorizonDrawPlanner<Integer> p = new HorizonDrawPlanner<>(new ClientHorizonView(s, 1000, 1000, Runnable::run),
+                new MeshResidency<>(gpu, BIG, 3));
+        p.tick(0, 0, 0, 5000, null); assertEquals(2, p.frame(0, 80, 0).size());
+        s.tiles.remove(key(0, 10, 0));                            // server DROP
+        p.tick(0, 0, 0, 5000, null);
+        p.frame(0, 80, 0);                                        // frame 1: the dropped tile leaves the plan, its handle is queued
+        assertEquals(1, p.residency().pendingFrees());
+        assertEquals(2, gpu.live.size(), "still alive: earlier frames may still be reading it");
+        p.frame(0, 80, 0);
+        assertEquals(2, gpu.live.size());
+        p.frame(0, 80, 0);
+        assertEquals(2, gpu.live.size(), "queued in frame N, still open through frame N+2");
+        p.frame(0, 80, 0);
+        assertEquals(1, gpu.live.size(), "closed at the start of frame N+3");
+        assertEquals(0, p.residency().pendingFrees());
+        p.release();                                              // level change: deferred too
+        assertEquals(1, p.residency().pendingFrees());
+        p.close();                                                // shutdown flushes everything now
+        assertEquals(0, gpu.live.size()); assertEquals(0, p.residency().pendingFrees());
+        assertEquals(gpu.uploads, gpu.frees, "every upload freed exactly once");
+    }
+
     @Test void residencyIsBoundedByCountAndBytesAndEvictsTheFarthest() {
         Store s = new Store(); FakeGpu gpu = new FakeGpu();
         for (int i = 10; i < 20; i++) s.put(0, i, 0, 1, 64);

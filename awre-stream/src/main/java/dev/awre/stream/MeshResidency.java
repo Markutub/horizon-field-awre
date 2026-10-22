@@ -2,6 +2,7 @@ package dev.awre.stream;
 
 import dev.awre.protocol.TileKey;
 import dev.horizonfield.core.terrain.TerrainMesher;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -18,6 +19,9 @@ import java.util.Set;
  * <li>Uploads per call are bounded by count and bytes; residency is bounded by count and bytes (the farthest tiles are evicted first).</li>
  * <li>Tiles that are not candidates any more (DROP, out of range, other dimension) are freed on the next {@link #sync}.</li>
  * <li>{@link #releaseAll} frees everything (disconnect, dimension change, shutdown) and is idempotent.</li>
+ * <li>Optional deferred free ({@code freeDelayFrames > 0}): a handle that was drawn recently is closed only after that many
+ *     {@link #endFrame} calls, because explicit-API backends (Vulkan) may still have the previous frames' draws in flight.
+ *     {@link #flush} closes everything pending at once (shutdown). Default 0 = free immediately (previous behaviour).</li>
  * </ul>
  */
 public final class MeshResidency<H> {
@@ -43,10 +47,37 @@ public final class MeshResidency<H> {
     private final Limits limits;
     private final Map<TileKey, Resident<H>> slots = new HashMap<>();
     private final Map<TileKey, Long> failedRevision = new HashMap<>();
+    private record Pending<H>(H handle, int framesLeft) { }
+    private final ArrayDeque<Pending<H>> pending = new ArrayDeque<>();
+    private final int freeDelayFrames;
     private long residentBytes;
     private long uploads, uploadBytes, uploadFailures, frees, freeFailures, capEvictions, capSkipped, replacements;
 
-    public MeshResidency(Backend<H> backend, Limits limits) { this.backend = backend; this.limits = limits; }
+    public MeshResidency(Backend<H> backend, Limits limits) { this(backend, limits, 0); }
+
+    /** @param freeDelayFrames how many {@link #endFrame} calls a freed handle waits before the backend closes it (0 = immediately) */
+    public MeshResidency(Backend<H> backend, Limits limits, int freeDelayFrames) {
+        if (freeDelayFrames < 0) throw new IllegalArgumentException("freeDelayFrames");
+        this.backend = backend; this.limits = limits; this.freeDelayFrames = freeDelayFrames;
+    }
+
+    /** Handles waiting for their delayed close. */
+    public int pendingFrees() { return pending.size(); }
+
+    /** Call once per rendered frame (render thread): closes handles whose delay has elapsed. */
+    public void endFrame() {
+        int n = pending.size();
+        for (int i = 0; i < n; i++) {
+            Pending<H> p = pending.poll();
+            if (p.framesLeft() <= 1) closeNow(p.handle()); else pending.add(new Pending<>(p.handle(), p.framesLeft() - 1));
+        }
+    }
+
+    /** Closes every pending handle now (shutdown / disconnect: nothing will be drawn again). Safe to call repeatedly. */
+    public void flush() {
+        Pending<H> p;
+        while ((p = pending.poll()) != null) closeNow(p.handle());
+    }
 
     public boolean isResident(TileKey k) { return slots.containsKey(k); }
     public Resident<H> get(TileKey k) { return slots.get(k); }
@@ -121,7 +152,12 @@ public final class MeshResidency<H> {
     private void free(Resident<H> r) {
         residentBytes -= r.bytes();
         if (r.handle() == null) return;
-        try { backend.free(r.handle()); frees++; } catch (RuntimeException e) { freeFailures++; }
+        if (freeDelayFrames > 0) pending.add(new Pending<>(r.handle(), freeDelayFrames));
+        else closeNow(r.handle());
+    }
+
+    private void closeNow(H handle) {
+        try { backend.free(handle); frees++; } catch (RuntimeException e) { freeFailures++; }
     }
 
     /** Frees every GPU mesh. Safe to call repeatedly. */

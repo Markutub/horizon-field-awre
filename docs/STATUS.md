@@ -59,3 +59,17 @@ Render path implemented in source; see `docs/phases/PHASE_01.md` for the PASS/FA
 ## Next task
 
 Implement the smallest real Fabric render adapter that consumes `ClientHorizonView.update(...)` results using Minecraft 1.21.11's supported render lifecycle. First run the separate Fabric build to validate current APIs; then add the draw path and resource lifecycle, focused tests where possible, and a reproducible in-game smoke procedure. Update `docs/phases/PHASE_01.md`, this file, and `AI_CONTEXT.md` only with verified outcomes.
+
+
+## Session 22 (CI log from session 21 phase 03)
+
+- G2 failure cause: the server put the Bukkit world name ("world") on the wire; the client filters on the level's dimension key
+  ("minecraft:overworld"), so every tile was filtered out (received=2120, candidates=0, mesh_built=0). Server now sends
+  `World#getKey()` (`AwreChannel.wireDimension`). **Not yet confirmed by CI.**
+- `MeshResidency` has optional deferred free (`freeDelayFrames`, `endFrame()`, `flush()`); the mod uses 3 frames. Default 0 keeps old behaviour.
+- Client logic moved out of `AwreClientMod` into pure `ClientRuntime` (tested); the mod is now a thin adapter.
+- New `-Dawre.render=auto|on|off`; auto disables drawing when iris/distanthorizons/voxy/bobby/vulkanmod is loaded.
+- New client warning when tiles are held but none match the current dimension.
+- Pure-Java suites: core 73/73, protocol 67/67, stream 43/43. Fabric and Paper modules were only syntax-checked (no network): CI is the compile check.
+- New `docs/COMPATIBILITY.md` (every cell NOT TESTED unless stated).
+- Compatibility scaffolding (session 22b): `docs/COMPAT_PLAN.md`; `RenderPolicy` (Sodium/Iris/VulkanMod/Bobby never disable drawing; Distant Horizons/Voxy do in auto); `ShaderPackBridge` + reflective `IrisBridge`; `ColorOverrides` + `config/awre-colors.txt`. Suites: core 76/76, protocol 67/67, stream 46/46. Fabric side only syntax-checked.

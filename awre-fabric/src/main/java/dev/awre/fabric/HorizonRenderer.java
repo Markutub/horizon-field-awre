@@ -90,24 +90,39 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
         if (draws.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
         int submitted = 0;
+        String stage = "getMainRenderTarget";   // the call in progress, so a failure says WHICH API assumption was wrong
         // API-ASSUMPTION: main render target exposes color/depth texture views; CommandEncoder.createRenderPass(label, color, clear, depth, clearDepth).
         var target = mc.getMainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty())) {
+        try {
+            stage = "createRenderPass";
+            RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty());
+            try (pass) {
+            stage = "setPipeline";
             pass.setPipeline(PIPELINE);
             // API-ASSUMPTION: bindDefaultUniforms(pass) binds Projection/Fog/Globals; DynamicUniforms.writeTransform(modelView, colour, modelOffset, texMatrix).
+            stage = "bindDefaultUniforms";
             RenderSystem.bindDefaultUniforms(pass);
             for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {
+                stage = "writeTransform";
                 var slice = RenderSystem.getDynamicUniforms().writeTransform(
                         viewMatrix, new Vector4f(1, 1, 1, 1), new Vector3f(d.offX(), d.offY(), d.offZ()), new Matrix4f());
+                stage = "setUniform";
                 pass.setUniform("DynamicTransforms", slice);
+                stage = "setVertexBuffer";
                 pass.setVertexBuffer(0, d.handle().vertices());
+                stage = "setIndexBuffer";
                 pass.setIndexBuffer(d.handle().indices(), VertexFormat.IndexType.INT);
+                stage = "drawIndexed";
                 pass.drawIndexed(0, 0, d.indexCount(), 1);      // API-ASSUMPTION: (baseVertex, firstIndex, indexCount, instanceCount)
                 submitted++;
             }
+            stage = "closePass";
+            }
         } catch (RuntimeException e) {
-            if (drawErrors++ < 5) LOG.warn("[AWRE] draw failed after {} of {} draws: {}", submitted, draws.size(), e.toString());
+            // full stack trace for the first failures: the CI log must show the real cause, not just the exception class
+            if (drawErrors++ < 3) LOG.warn("[AWRE] draw failed at stage '" + stage + "' after " + submitted + " of " + draws.size() + " draws", e);
+            else if (drawErrors < 6) LOG.warn("[AWRE] draw failed at stage '{}' after {} of {} draws: {}", stage, submitted, draws.size(), e.toString());
             submitted = 0;                                        // do not count a failed pass as submitted
         }
         p.recordSubmitted(submitted);

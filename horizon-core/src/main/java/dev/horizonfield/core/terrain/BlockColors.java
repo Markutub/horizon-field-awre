@@ -23,11 +23,18 @@ public final class BlockColors {
         put("obsidian", 0x15121C); put("end_stone", 0xDDE0A5);
     }
 
+    private static volatile ColorOverrides overrides = ColorOverrides.EMPTY;
+
     private BlockColors() { }
+
+    /** Replaces the active overrides (never null). Rules apply before the built-in table; air is never overridden. */
+    public static void setOverrides(ColorOverrides o) { overrides = o == null ? ColorOverrides.EMPTY : o; }
 
     /** Opaque ARGB for a block key; air and unknown-air give 0 (fully transparent). */
     public static int argb(String key) {
         if (key == null || key.endsWith(":air") || key.endsWith("_air")) return 0;
+        Integer o = overrides.lookup(key);
+        if (o != null) return o;
         Integer c = TABLE.get(key);
         if (c != null) return c;
         int h = key.hashCode() * 0x9E3779B1;

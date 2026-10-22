@@ -1,57 +1,80 @@
 package dev.awre.fabric;
 
 import dev.awre.protocol.Awre;
-import dev.awre.protocol.ClientSession;
-import dev.awre.protocol.Counters;
-import dev.awre.protocol.Limits;
-import dev.awre.protocol.TileKey;
+import dev.awre.stream.ClientRuntime;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * G0 client plus the PHASE_01 render hook: negotiates awre:main, meshes tiles in the background, uploads/draws them through HorizonRenderer (NOT compiled yet).
- * Everything protocol-related lives in the pure-Java ClientSession (unit tested); this class only wires Fabric events.
- * Test hooks (JVM properties): -Dawre.test.minVersion=2 -Dawre.test.maxVersion=3 forces an incompatible client.
+ * THIN Minecraft 1.21.11 / Fabric adapter. All client logic (session, view, planner, logging, level changes) lives in the pure-Java
+ * {@link ClientRuntime}; this class only wires Fabric events, the payload channel and {@link HorizonRenderer}. A port to another
+ * Minecraft generation rewrites this file and HorizonRenderer, nothing else.
+ *
+ * <p>JVM properties: {@code -Dawre.render=auto|on|off} (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
+ * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
  */
 public final class AwreClientMod implements ClientModInitializer {
     static final Logger LOG = LoggerFactory.getLogger("AWRE");
     private static final String MOD_VERSION = "0.1.0";
-    private static final int START_DELAY_TICKS = 20;   // let minecraft:register go out first (hypothesis; retries cover a miss)
-
-    private final Limits limits = Limits.defaults().withClientTileCache(8192);   // terrain streaming holds thousands of tiles
-    private final Counters counters = new Counters();
-    private ClientSession session;
-    private dev.awre.stream.ClientHorizonView view;
+    private static final int FREE_DELAY_FRAMES = 3;     // explicit-API backends may still read a buffer drawn in the last frames
     private final HorizonRenderer renderer = new HorizonRenderer();
-    private dev.awre.stream.HorizonDrawPlanner<HorizonRenderer.GpuMesh> planner;
-    private Object lastLevel;                         // identity of Minecraft.level: changes on dimension change / respawn / disconnect
-    private int ticksSinceViewUpdate, ticksSinceViewLog;
-    private String lastViewLog = "";
-    // distance (blocks) beyond which held tiles are not drawn; -Dawre.view.maxDistance=... to change
-    private final double viewMaxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
-    private int sinceJoin = -1;
-    private ClientSession.State lastLogged = ClientSession.State.IDLE;
-    private TileKey lastTileLogged;
-    private int ticksSinceStoreLog, lastStoreCount = -1;
+    private ClientRuntime<HorizonRenderer.GpuMesh> runtime;
+    private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
+    private boolean lastShaderActive;
 
     @Override
     public void onInitializeClient() {
         PayloadTypeRegistry.playS2C().register(AwrePayload.TYPE, AwrePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(AwrePayload.TYPE, AwrePayload.CODEC);
-        ClientPlayNetworking.registerGlobalReceiver(AwrePayload.TYPE, (payload, context) -> onPayload(payload));
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> onJoin());
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> onDisconnect());
-        ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); if (planner != null) planner.close(); planner = null; });
+
+        var decision = dev.awre.stream.compat.RenderPolicy.decide(dev.awre.stream.compat.RenderPolicy.Mode.parse(System.getProperty("awre.render", "auto")),
+                id -> FabricLoader.getInstance().isModLoaded(id));
+        decision.notes().forEach(LOG::info);
+        boolean renderEnabled = decision.renderEnabled();
+        loadColorOverrides();
+        shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
+
+        double maxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
+        runtime = new ClientRuntime<>(new ClientRuntime.Host() {
+            @Override public void send(byte[] frame) { AwreClientMod.this.send(frame); }
+            @Override public void info(String m) { LOG.info(m); }
+            @Override public void warn(String m) { LOG.warn(m); }
+        }, renderer, MOD_VERSION, maxDistance, FREE_DELAY_FRAMES, renderEnabled);
+
+        ClientPlayNetworking.registerGlobalReceiver(AwrePayload.TYPE, (payload, context) -> runtime.onPayload(payload.data(), payload.skippedLength()));
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            renderer.releaseAll();
+            runtime.onJoin(Integer.getInteger("awre.test.minVersion", Awre.PROTOCOL_MIN), Integer.getInteger("awre.test.maxVersion", Awre.PROTOCOL_MAX));
+            renderer.setPlanner(runtime.planner());
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            renderer.releaseAll();                       // GPU meshes first, then the CPU side
+            runtime.onDisconnect();
+            renderer.setPlanner(null);
+        });
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            boolean shaders = shaderBridge.shaderPackActive();
+            if (shaders != lastShaderActive) {
+                lastShaderActive = shaders;
+                LOG.info("[AWRE] shader pack {}{}", shaders ? "ACTIVE" : "inactive", shaders ? ": AWRE terrain is drawn with a vanilla shader and is NOT shaded yet (docs/COMPAT_PLAN.md, Iris step 2)" : "");
+            }
+            double vanilla = client.options.renderDistance().get() * 16.0;
+            // ResourceKey#toString looks like "ResourceKey[minecraft:dimension / minecraft:overworld]"; parsed so the accessor name does not matter
+            String dim = client.level == null ? null : dev.awre.stream.DimensionGate.fromResourceKeyString(String.valueOf(client.level.dimension()));
+            runtime.onTick(client.player != null, client.level, client.player == null ? 0 : client.player.getX(), client.player == null ? 0 : client.player.getZ(), vanilla, dim);
+        });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); runtime.shutdown(); renderer.setPlanner(null); });
+
         // CI-confirmed (session 18 build log): WorldRenderEvents.END_MAIN exists and Camera#position() compiles, but WorldRenderContext has NO
-        // positionMatrix(). The view matrix is therefore built from the camera rotation (world -> view, no translation: the translation is
-        // the per-draw offset). API-ASSUMPTION still open: Camera#rotation() returning a joml Quaternionf.
+        // positionMatrix(). The view matrix is built from the camera rotation (world -> view, no translation: the translation is the
+        // per-draw offset). API-ASSUMPTION still open: Camera#rotation() returning a joml Quaternionf.
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN.register(ctx -> {
             var camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
             var cam = camera.position();
@@ -61,111 +84,17 @@ public final class AwreClientMod implements ClientModInitializer {
         LOG.info("[AWRE] client G0 loaded; protocol v{}..v{}, channel {}", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX, Awre.CHANNEL);
     }
 
-    private void onJoin() {
-        int min = Integer.getInteger("awre.test.minVersion", Awre.PROTOCOL_MIN);
-        int max = Integer.getInteger("awre.test.maxVersion", Awre.PROTOCOL_MAX);
-        session = new ClientSession(limits, counters, MOD_VERSION, min, max);
-        session.setPayloadValidator(dev.awre.stream.TerrainPayloads.ANY);   // G0/G1 test tiles or terrain tiles
-        renderer.releaseAll();
-        if (planner != null) planner.close();
-        view = new dev.awre.stream.ClientHorizonView(session, 4096);        // meshes are built on a background thread
-        planner = new dev.awre.stream.HorizonDrawPlanner<>(view, new dev.awre.stream.MeshResidency<>(renderer, dev.awre.stream.MeshResidency.Limits.defaults()));
-        renderer.setPlanner(planner);
-        lastLevel = null;
-        sinceJoin = 0;
-        lastLogged = ClientSession.State.IDLE;
-        lastTileLogged = null;
-        LOG.info("[AWRE] joined a server; handshake starts in {} ticks (client v{}..v{})", START_DELAY_TICKS, min, max);
-    }
-
-    private void onDisconnect() {
-        if (session != null) LOG.info("[AWRE] disconnected; final state {} ({}), tiles held {}, counters {}",
-                session.state(), session.reason(), session.tileCount(), counters.snapshot());
-        session = null;
-        renderer.releaseAll();                                              // GPU meshes first, then the CPU side
-        if (planner != null) { planner.close(); planner = null; }           // closes the view too
-        view = null;
-        renderer.setPlanner(null);
-        sinceJoin = -1;
-    }
-
-    private void onTick(net.minecraft.client.Minecraft client) {
-        if (session == null) return;
-        updateView(client);
-        if (sinceJoin >= 0 && sinceJoin < START_DELAY_TICKS) {
-            if (++sinceJoin == START_DELAY_TICKS) send(session.start());
-            return;
-        }
-        byte[] retry = session.tick();
-        if (retry != null) send(retry);
-        logTransitions();
-        if (session.state() == ClientSession.State.ACTIVE && ++ticksSinceStoreLog >= 100) {   // every 5 s, only when it changed
-            ticksSinceStoreLog = 0;
-            int n = session.tileCount();
-            if (n != lastStoreCount) {
-                lastStoreCount = n;
-                LOG.info("[AWRE] store tiles={} accepted={} dropped={} palette_entries={} strikes={}", n, counters.get("client.tile.accepted"), counters.get("client.tile.dropped"), counters.get("client.palette.entries"), session.strikes());
-            }
-        }
-    }
-
-    /** 10 Hz: decide which held tiles would be drawn (HorizonDrawPlanner consumes it; HorizonRenderer draws it). */
-    private void updateView(net.minecraft.client.Minecraft client) {
-        dev.awre.stream.ClientHorizonView v = view;
-        var pl = planner;
-        if (v == null || pl == null || session.state() != ClientSession.State.ACTIVE || client.player == null) return;
-        if (lastLevel != client.level) {                                    // dimension change / respawn: drop every GPU mesh of the old level
-            if (lastLevel != null) { LOG.info("[AWRE] level changed: releasing GPU meshes"); pl.release(); }
-            lastLevel = client.level;
-        }
-        if (++ticksSinceViewUpdate >= 2) {
-            ticksSinceViewUpdate = 0;
-            double vanilla = client.options.renderDistance().get() * 16.0;
-            // the level's own dimension wins; the last received tile is only a fallback (see DimensionGate)
-            String dim = client.level == null ? null : dev.awre.stream.DimensionGate.fromResourceKeyString(String.valueOf(client.level.dimension()));
-            pl.tick(client.player.getX(), client.player.getZ(), vanilla, viewMaxDistance,
-                    dev.awre.stream.DimensionGate.filter(dim, session.lastTile()));
-        }
-        if (++ticksSinceViewLog >= 100) {                      // every 5 s, only when it changed
-            ticksSinceViewLog = 0;
-            var s = v.stats();
-            String line = "held=" + s.held() + " candidates=" + s.candidates() + " ready=" + s.ready() + " drawn=" + s.drawn()
-                    + " hidden_vanilla=" + s.hiddenByVanilla() + " hidden_finer=" + s.hiddenByFiner() + " too_far=" + s.tooFar()
-                    + " tris=" + s.triangles() + " pending=" + s.pending() + " failures=" + s.failures();
-            if (!line.equals(lastViewLog)) { lastViewLog = line; LOG.info("[AWRE] horizon view: {}", line); }
-            LOG.info("[AWRE] render: {}", pl.diagnosticsLine());
-        }
-    }
-
-    private void onPayload(AwrePayload p) {
-        ClientSession s = session;
-        if (s == null) return;
-        if (p.skippedLength() > 0) {
-            s.onOversizeSkipped(p.skippedLength());
-            LOG.warn("[AWRE] skipped an oversize payload of {} bytes without allocating it", p.skippedLength());
-        } else {
-            for (byte[] reply : s.onFrame(p.data())) send(reply);
-        }
-        logTransitions();
-    }
-
-    private void logTransitions() {
-        ClientSession s = session;
-        if (s == null) return;
-        if (s.state() != lastLogged) {
-            lastLogged = s.state();
-            switch (s.state()) {
-                case ACTIVE -> LOG.info("[AWRE] handshake OK: protocol v{}, max frame {} B, caps {} (1=tile, 2=fragment, 4=drop, 8=palette), server session {}", s.negotiatedVersion(), s.negotiatedFrame(), s.negotiatedCaps(), Long.toHexString(s.sessionId()));
-                case INCOMPATIBLE -> LOG.warn("[AWRE] incompatible server, continuing as a normal vanilla-style client: {}", s.reason());
-                case FAILED -> LOG.warn("[AWRE] AWRE unavailable, vanilla fallback: {}", s.reason());
-                default -> { }
-            }
-        }
-        TileKey t = s.lastTile();
-        if (t != null && !t.equals(lastTileLogged)) {
-            lastTileLogged = t;
-            var rec = s.tile(t);
-            LOG.info("[AWRE] test tile ({},{}) lod {} rev {} {} verified OK ({} decoded bytes)", t.tileX(), t.tileZ(), t.lod(), rec.revision(), rec.provenance(), rec.decoded().length);
+    /** config/awre-colors.txt: "namespace:block = #RRGGBB" rules for blocks the built-in colour table does not know (see ColorOverrides). */
+    private static void loadColorOverrides() {
+        java.nio.file.Path f = FabricLoader.getInstance().getConfigDir().resolve("awre-colors.txt");
+        if (!java.nio.file.Files.isRegularFile(f)) return;
+        try {
+            var o = dev.horizonfield.core.terrain.ColorOverrides.parse(java.nio.file.Files.readAllLines(f));
+            dev.horizonfield.core.terrain.BlockColors.setOverrides(o);
+            LOG.info("[AWRE] colour overrides: {} rules from {}", o.size(), f.getFileName());
+            for (String r : o.rejected()) LOG.warn("[AWRE] awre-colors.txt {}", r);
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("[AWRE] could not read {}: {}", f.getFileName(), e.toString());
         }
     }
 

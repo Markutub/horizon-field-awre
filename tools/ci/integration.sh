@@ -122,7 +122,12 @@ if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/nu
 if grep -Eq '\[AWRE\] render: .*submitted_draws=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) draw calls submitted"; else echo "INFO: G3 no submitted draws logged"; fi
 grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
 if grep -Eq 'Exception|Caused by' "$OUT/clientA.log"; then
-  grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null && fail "AWRE-related exception/rejection in client log" || pass "no AWRE exceptions in client log (unrelated exceptions may exist)"
+  if grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null; then
+    echo "---- AWRE exception lines in clientA.log (first match with 12 lines of stack/context) ----"
+    grep -En -m3 -A12 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" | head -60
+    echo "----"
+    fail "AWRE-related exception/rejection in client log"
+  else pass "no AWRE exceptions in client log (unrelated exceptions may exist)"; fi
 else pass "no exceptions in client log"; fi
 stop_client
 

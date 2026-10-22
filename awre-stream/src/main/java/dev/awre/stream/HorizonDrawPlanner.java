@@ -43,6 +43,7 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
 
     /** Every rendered frame: bounded uploads, then the draw list (nearest first) relative to the camera. */
     public List<Draw<H>> frame(double camX, double camY, double camZ) {
+        residency.endFrame();                                  // delayed frees from earlier frames come due here
         if (residency.sync(wanted, candidates)) dirty = true;
         if (dirty) { drawKeys = view.select(residency::isResident); dirty = false; }
         List<Draw<H>> out = new ArrayList<>(drawKeys.size());
@@ -90,5 +91,5 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
         dirty = true;
     }
 
-    @Override public void close() { release(); view.close(); }
+    @Override public void close() { release(); residency.flush(); view.close(); }
 }
