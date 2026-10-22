@@ -217,4 +217,43 @@ class StreamLoopTest {
         assertTrue(s.stats().sent() - after < s.plan().leaves().size(), "retries must be bounded: " + s.stats() + " leaves=" + s.plan().leaves().size());
         assertTrue(lastSent > 0);
     }
+
+    private long sentToNeverAckingClient(PlayerStreamer s, int rounds) {
+        for (int round = 0; round < rounds; round++) {
+            for (int i = 0; i < 60; i++) step(s, 0, 0, 0);
+            clock.addAndGet(31_000_000_000L);                                // lets in-flight tiles expire (= failures)
+        }
+        return s.stats().sent();
+    }
+
+    @Test void aBlacklistedTileIsRetriedAfterTheCooldownWithBackoff() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        StreamConfig c = new StreamConfig(300, 400_000, 65_536, 0.1, 4096, 16, 256, 2);
+        long cooldown = 100_000_000_000L;                                    // 100 s
+        PlayerStreamer s = new PlayerStreamer(server, store, palette, new LodPlanner(model), c, MSB, LSB, DIM, clock::get, cooldown);
+        client.setPayloadValidator(TerrainPayloads.TERRAIN); toServer(client.start());
+        dropAcks = true;
+        long blacklisted = sentToNeverAckingClient(s, 8);                    // enough expiries to reach the retry limit everywhere
+        long plateau = sentToNeverAckingClient(s, 1);                        // nothing new while blacklisted and the cooldown has not elapsed
+        assertEquals(blacklisted, plateau, "blacklisted tiles must not be re-sent before the cooldown");
+        clock.addAndGet(cooldown);                                           // cooldown elapsed
+        long afterCooldown = sentToNeverAckingClient(s, 1);
+        assertTrue(afterCooldown > plateau, "tiles must be retried after the cooldown, not only after a reconnect");
+    }
+
+    @Test void aNewRevisionClearsTheBlacklistImmediately() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        StreamConfig c = new StreamConfig(300, 400_000, 65_536, 0.1, 4096, 16, 256, 2);
+        PlayerStreamer s = new PlayerStreamer(server, store, palette, new LodPlanner(model), c, MSB, LSB, DIM, clock::get, 1_000_000_000_000L);
+        client.setPayloadValidator(TerrainPayloads.TERRAIN); toServer(client.start());
+        dropAcks = true;
+        long plateau = sentToNeverAckingClient(s, 8);
+        assertEquals(plateau, sentToNeverAckingClient(s, 1));
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED + 1);            // content changes: new revisions everywhere
+        assertTrue(sentToNeverAckingClient(s, 1) > plateau, "changed tiles are a different payload and must be sent again");
+    }
+
+    @Test void nonPositiveCooldownIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new PlayerStreamer(server, store, palette, new LodPlanner(model), StreamConfig.defaults(), MSB, LSB, DIM, clock::get, 0));
+    }
 }

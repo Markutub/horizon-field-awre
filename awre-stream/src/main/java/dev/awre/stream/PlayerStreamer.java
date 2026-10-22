@@ -47,7 +47,13 @@ public final class PlayerStreamer {
     private final StreamScheduler scheduler;
     private final PyramidTileSource source;
     private final ByteBudget budget;
-    private final Map<LodKey, Integer> failures = new ConcurrentHashMap<>();
+    /** Default wait before a blacklisted tile is tried again; doubles per further failure, capped at 16x. */
+    public static final long DEFAULT_RETRY_COOLDOWN_NANOS = 60_000_000_000L;
+    /** Failure record: count, when it last failed, and the store revision it failed at (a new revision is a different payload). */
+    private record Fail(int count, long atNanos, long rev, int rounds) { }
+    private final Map<LodKey, Fail> failures = new ConcurrentHashMap<>();
+    private final LongSupplier nanos;
+    private final long retryCooldownNanos;
     private final AtomicLong sent = new AtomicLong(), wireBytes = new AtomicLong(), dropped = new AtomicLong(), failureEvents = new AtomicLong(), replans = new AtomicLong();
 
     private LodPlan plan;
@@ -57,6 +63,13 @@ public final class PlayerStreamer {
 
     public PlayerStreamer(ServerSession session, TerrainStore store, MaterialPalette palette, LodPlanner planner, StreamConfig cfg,
                           long worldMsb, long worldLsb, String dimension, LongSupplier nanos) {
+        this(session, store, palette, planner, cfg, worldMsb, worldLsb, dimension, nanos, DEFAULT_RETRY_COOLDOWN_NANOS);
+    }
+
+    public PlayerStreamer(ServerSession session, TerrainStore store, MaterialPalette palette, LodPlanner planner, StreamConfig cfg,
+                          long worldMsb, long worldLsb, String dimension, LongSupplier nanos, long retryCooldownNanos) {
+        if (retryCooldownNanos < 1) throw new IllegalArgumentException("retryCooldownNanos");
+        this.nanos = nanos; this.retryCooldownNanos = retryCooldownNanos;
         this.session = session; this.store = store; this.palette = palette; this.planner = planner; this.cfg = cfg;
         this.worldMsb = worldMsb; this.worldLsb = worldLsb; this.dimension = dimension;
         this.scheduler = new StreamScheduler(planner.model());
@@ -75,7 +88,24 @@ public final class PlayerStreamer {
         });
     }
 
-    private void fail(LodKey k) { failures.merge(k, 1, Integer::sum); failureEvents.incrementAndGet(); }
+    private void fail(LodKey k) {
+        long now = nanos.getAsLong(), rev = store.version(k);
+        failures.merge(k, new Fail(1, now, rev, 0), (old, ignored) -> new Fail(old.count() + 1, now, rev, old.rounds()));
+        failureEvents.incrementAndGet();
+    }
+
+    /** True while the tile must not be sent. A blacklisted tile is released when its revision changed or its (backed-off) cooldown elapsed. */
+    private boolean blacklisted(LodKey k) {
+        Fail f = failures.get(k);
+        if (f == null || f.count() < cfg.retryLimit()) return false;
+        long wait = retryCooldownNanos << Math.min(4, f.rounds());
+        if (store.version(k) != f.rev()) { failures.remove(k); return false; }   // different payload: start over
+        if (nanos.getAsLong() - f.atNanos() >= wait) {
+            failures.put(k, new Fail(cfg.retryLimit() - 1, f.atNanos(), f.rev(), f.rounds() + 1));   // one more attempt; failing again re-blacklists with a longer wait
+            return false;
+        }
+        return true;
+    }
 
     /** One scheduling round. Returns the frames to transmit, in order (TILE/FRAGMENT first, then DROP). */
     public List<byte[]> tick(double x, double z, double headingRad) {
@@ -95,7 +125,7 @@ public final class PlayerStreamer {
 
         for (StreamScheduler.Order o : d.send()) {
             LodKey k = o.key();
-            if (failures.getOrDefault(k, 0) >= cfg.retryLimit()) continue;
+            if (blacklisted(k)) continue;
             TerrainStore.Versioned v = store.versioned(k);
             if (v == null) continue;
             Provenance prov = v.tile().confidence() == Confidence.OBSERVED ? Provenance.AUTHORITATIVE : Provenance.PREDICTED;
@@ -110,7 +140,7 @@ public final class PlayerStreamer {
                 source.observe(k.lod(), (int) wire);
             } else {
                 budget.refund(wire);
-                if (tf.result() == ServerSession.SendResult.TOO_LARGE) failures.put(k, cfg.retryLimit());   // will never fit: stop trying
+                if (tf.result() == ServerSession.SendResult.TOO_LARGE) failures.put(k, new Fail(cfg.retryLimit(), nanos.getAsLong(), v.version(), 0));   // will not fit this revision: back off, retry on a new revision or after the cooldown
                 else break;                                                                                  // rate limited / window full / not active: try again next tick
             }
         }

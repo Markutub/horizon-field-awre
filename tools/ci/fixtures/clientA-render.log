@@ -1,0 +1,4 @@
+[05:05:14] [Render thread/INFO]: [AWRE] horizon view: held=2114 candidates=1617 ready=777 drawn=777 hidden_vanilla=497 hidden_finer=0 too_far=0 tris=243510 pending=0 failures=0
+[05:05:14] [Render thread/INFO]: [AWRE] render: received=2114 mesh_built=777 mesh_failed=0 gpu_uploaded=773 upload_failed=0 gpu_freed=0 gpu_resident=773 gpu_bytes=10648792 planned_draws=773 planned_tris=242018 submitted_draws=736199 submitted_frames=1910
+[05:05:19] [Render thread/INFO]: [AWRE] horizon view: held=2114 candidates=1617 ready=978 drawn=978 hidden_vanilla=497 hidden_finer=0 too_far=0 tris=306880 pending=0 failures=0
+[05:05:19] [Render thread/INFO]: [AWRE] render: received=2114 mesh_built=978 mesh_failed=0 gpu_uploaded=974 upload_failed=0 gpu_freed=0 gpu_resident=974 gpu_bytes=13439096 planned_draws=974 planned_tris=305434 submitted_draws=1255796 submitted_frames=2504

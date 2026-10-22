@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end AWRE check with HeadlessMc: Paper server + AWRE plugin, Fabric client + AWRE mod, then assert on the logs.
 # Usage: tools/ci/integration.sh <dir-with-jars>      Env: MC_VERSION (default 1.21.11), HMC (default: headlessmc), OUT (default ./ci-out)
+# Env also: RENDER_SMOKE=1 makes the render counters (tools/ci/render-gate.sh) MANDATORY for client A; default 0 keeps them informational.
 # Needs: JDK 21 on PATH, HeadlessMc installed, network. Runs the client with an OFFLINE account: this is the CI-only use HeadlessMc allows.
 # Every step dumps diagnostics to $OUT (server/client logs, directory listings, HeadlessMc debug).
 #
@@ -10,6 +11,8 @@ set -uo pipefail
 JARS=$(realpath "${1:?usage: integration.sh <jars-dir>}")
 MC=${MC_VERSION:-1.21.11}
 HMC=${HMC:-headlessmc}
+RENDER_SMOKE=${RENDER_SMOKE:-0}
+GATE="$(dirname "$(realpath "$0")")/render-gate.sh"
 OUT=${OUT:-$PWD/ci-out}
 mkdir -p "$OUT"
 H() { "$HMC" -Dhmc.jline.enabled=false "$@"; }
@@ -121,6 +124,14 @@ check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizo
 if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
 if grep -Eq '\[AWRE\] render: .*submitted_draws=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) draw calls submitted"; else echo "INFO: G3 no submitted draws logged"; fi
 grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
+if [ "$RENDER_SMOKE" = "1" ]; then
+  # Opt-in render-smoke: only meaningful where the client reaches the world-render event. Applies to client A only
+  # (client C's tiles sit inside the vanilla render square, so candidates=0 there is expected, not a defect).
+  GATE_OUT=$("$GATE" "$OUT/clientA.log" 2>&1); GATE_RC=$?
+  echo "$GATE_OUT"
+  if [ "$GATE_RC" -eq 0 ]; then pass "G3 render smoke: mesh built, GPU uploaded, draws submitted, no AWRE renderer exception"
+  else fail "G3 render smoke: ${GATE_OUT#RENDER-GATE FAIL: }"; fi
+fi
 if grep -Eq 'Exception|Caused by' "$OUT/clientA.log"; then
   if grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null; then
     echo "---- AWRE exception lines in clientA.log (first match with 12 lines of stack/context) ----"

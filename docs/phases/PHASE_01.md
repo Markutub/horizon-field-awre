@@ -1,5 +1,9 @@
 # PHASE_01 — Fabric Rendering Baseline
 
+## 2026-10-22 (Session 27) evidence addendum (LATEST)
+
+Gate status: headless draw submission **observed** (supplied `clientA.log`, `submitted_draws=1255796`, `upload_failed=0`); reproducible opt-in gate now exists (`RENDER_SMOKE=1`). Still open: Fabric build of this exact snapshot, human-visible result (`docs/MANUAL_RENDER_TEST.md`), resource disposal on dimension change/disconnect/shutdown in-game. Counters are evidence of execution, not of correct pixels.
+
 ## Session 18 result (read this first)
 
 **State: IMPLEMENTED IN SOURCE, PURE-JAVA PART VERIFIED, MINECRAFT PART NOT COMPILED AND NOT RUN.** The sandbox had no network (Maven/Fabric/Gradle unreachable, no Gradle installed, no Minecraft), so `gradle -p awre-fabric build` could not be attempted to completion. Nothing below claims terrain is visible in-game.

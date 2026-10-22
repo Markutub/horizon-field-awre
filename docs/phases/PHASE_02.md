@@ -1,5 +1,9 @@
 # PHASE_02 — Correctness across world and LOD transitions
 
+## 2026-10-22 (Session 27) evidence addendum (LATEST)
+
+Pure-Java suite is now stream 52/52. In-game checks (negative/large coordinates, LOD swaps, dimension change, edit revisions) remain **NOT VERIFIED**; they are checks 3-9 of `docs/MANUAL_RENDER_TEST.md`.
+
 Status: **IN PROGRESS. Pure-Java part done and tested (Session 19). In-game checks NOT VERIFIED.**
 
 Input state: the user reported "all green" after PHASE_01, but the build log they supplied afterwards shows the Fabric build FAILING on the session 18 code (see PHASE_01.md), so "green" cannot have covered the Fabric job (user-reported only; no log, run id or in-game result was provided, so it is not recorded as verified evidence here, and it says nothing about whether terrain is actually visible).

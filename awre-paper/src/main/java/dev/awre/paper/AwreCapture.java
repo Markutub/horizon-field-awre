@@ -1,6 +1,7 @@
 package dev.awre.paper;
 
 import dev.horizonfield.core.CaptureBacklog;
+import dev.horizonfield.core.TimingWindow;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
@@ -56,6 +57,11 @@ final class AwreCapture implements Listener {
     private final CaptureBacklog<Ref> backlog = new CaptureBacklog<>(4096);
     private final long revalidateTicks;
     private long sinceSweep;
+    // Bounded main-thread cost instrumentation (last 2048 samples each; see docs/MEASUREMENT_PLAN.md). Measures, does not tune.
+    private final TimingWindow snapshotTimes = new TimingWindow(2048);   // one ChunkSnapshot + submit
+    private final TimingWindow tickTimes = new TimingWindow(2048);       // whole tick() body: sweep enqueue + pump + drain
+    private volatile int lastSweepChunks;
+    private volatile long lastSweepNanos;
     private BukkitTask task;
 
     /** @param revalidateSeconds 0 = never re-observe loaded chunks that no event reported as changed */
@@ -72,7 +78,14 @@ final class AwreCapture implements Listener {
 
     CaptureBacklog.Stats stats() { return backlog.stats(); }
 
-    void enqueueLoaded(World w) { for (Chunk c : w.getLoadedChunks()) request(w, c.getX(), c.getZ()); }
+    /** Main-thread cost line: snapshot and whole-tick percentiles plus the last revalidation sweep (enqueue work only). */
+    String timingStats() {
+        return "snapshot[" + snapshotTimes.summary().format() + "] tick[" + tickTimes.summary().format() + "] lastSweep chunks="
+                + lastSweepChunks + " enqueueMs=" + String.format(java.util.Locale.ROOT, "%.2f", lastSweepNanos / 1e6);
+    }
+
+    /** @return how many loaded chunks were requested */
+    int enqueueLoaded(World w) { Chunk[] loaded = w.getLoadedChunks(); for (Chunk c : loaded) request(w, c.getX(), c.getZ()); return loaded.length; }
 
     /** O(1): safe to call from any event, however often it fires; priorities are computed when the work is queued. */
     void request(World w, int cx, int cz) { backlog.request(new Ref(w.getUID(), cx, cz)); }
@@ -95,17 +108,26 @@ final class AwreCapture implements Listener {
     }
 
     private void tick() {
+        long t0 = System.nanoTime();
+        try { tickBody(); } finally { tickTimes.record(System.nanoTime() - t0); }
+    }
+
+    private void tickBody() {
         if (revalidateTicks > 0 && ++sinceSweep >= revalidateTicks) {
             sinceSweep = 0;
+            long s0 = System.nanoTime(); int n = 0;
             for (World w : plugin.getServer().getWorlds()) {
                 AwreWorldTerrain t = streaming.terrainFor(w);
-                if (t != null && t.ready) enqueueLoaded(w);
+                if (t != null && t.ready) n += enqueueLoaded(w);
             }
+            lastSweepChunks = n; lastSweepNanos = System.nanoTime() - s0;
         }
         backlog.pump(this::priority);
         backlog.drain(ref -> {
+            long s0 = System.nanoTime();
             try { return snapshot(ref); }
             catch (RuntimeException e) { plugin.getLogger().warning("[AWRE] snapshot failed for " + ref + ": " + e); return true; }   // a chunk that throws must not be retried forever
+            finally { snapshotTimes.record(System.nanoTime() - s0); }
         }, BUDGET_NANOS, MAX_PER_TICK);
     }
 

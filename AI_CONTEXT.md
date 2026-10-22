@@ -41,3 +41,7 @@ The separate legacy path (`horizon-paper`) captures loaded chunks into `ColumnTi
 4. `docs/architecture/DECISIONS.md`
 5. `docs/DEVELOPMENT.md`
 6. Protocol details: `docs/PROTOCOL.md`, `docs/AWRE_PROTOCOL.md`; existing implementation notes: `docs/AWRE_G1_FEATURES.md` and `docs/HANDOFF.md`.
+
+## 2026-10-22 (Session 27) update
+
+Supersedes the stale parts of the header above ("Gradle/Fabric/CI/in-game NOT run", "`awre-fabric` explicitly draws nothing"): supplied CI logs show the Fabric client meshing, uploading and submitting draws headlessly. Still unverified: fresh builds of this exact snapshot, visible pixels, production-scale server cost. Pure-Java: core 98 / protocol 67 / stream 52. See `docs/STATUS.md` (levels table), `docs/MANUAL_RENDER_TEST.md`, `docs/MEASUREMENT_PLAN.md`. Render smoke is opt-in (`RENDER_SMOKE=1` / workflow input); default CI remains non-flaky.

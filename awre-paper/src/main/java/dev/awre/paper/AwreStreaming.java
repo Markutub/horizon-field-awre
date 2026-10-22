@@ -170,7 +170,7 @@ final class AwreStreaming {
         AwreCapture c = capture;
         if (c == null) return null;
         var st = c.stats();
-        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting();
+        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting() + " " + c.timingStats();
     }
 
     int terrainChunks(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.chunkCount(); }

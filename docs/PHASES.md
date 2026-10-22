@@ -1,5 +1,9 @@
 # Phase Roadmap
 
+## 2026-10-22 (Session 27) evidence addendum (LATEST)
+
+Status column above predates the CI logs. Update: PHASE_01 = render path runs headlessly (draw counters non-zero in supplied logs); compile of this exact snapshot and visible output NOT VERIFIED, so it stays IN PROGRESS. PHASE_02 = pure-Java invariants done; in-game NOT VERIFIED. PHASE_04 = started (bounded capture timing instrumentation; no measurements). Exit gates unchanged. Levels table: `docs/STATUS.md`.
+
 Statuses refer to the Session 18 source and local checks run 2026-10-22, not to the current remote branch.
 
 | Phase | Name | Status | Objective / exit gate |

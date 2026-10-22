@@ -1,5 +1,28 @@
 # Project Status
 
+## 2026-10-22 (Session 27) evidence addendum (LATEST)
+
+Older sections below are historical (Session 16-26 snapshots) and are kept as written. Current evidence, by verification level:
+
+| Level | Status for source `dbbaae9` + Session 27 edits |
+|---|---|
+| 1. Pure-Java tests | **VERIFIED, run this session**: core 98 (93 + 5 new `TimingWindowTest`), protocol 67, stream 52 (49 + 3 new retry/backoff tests), render-gate parser tests 13/13 (`tools/ci/render-gate-test.sh`); 0 failures |
+| 2. Fresh root + Fabric Gradle builds | **NOT RUN**: no Gradle, no wrapper at root, no network in the session sandbox. Indirect only: the supplied integration logs show a built plugin and mod loading in CI, so *some* build of an unknown commit succeeded; that is not proof for this snapshot. Session 27 Paper edits (`AwreCapture`, `AwreStreaming`) are syntax-checked only (`tools/ParseOnly.java`: 8 files, 0 errors) and **compile-unverified** |
+| 3. Headless integration | **Supplied logs (not re-run)**: 32 PASS / 0 FAIL; clientA render line `mesh_built=978 gpu_uploaded=974 upload_failed=0 submitted_draws=1255796`. `render-gate.sh` applied offline to the supplied `clientA.log`: PASS. Applied to `clientC.log`: FAIL at "mesh built" as expected (169 tiles inside the vanilla square, `candidates=0`; client C must never be gated) |
+| 4. Human-visible in-game | **NOT VERIFIED**: no display. Procedure: `docs/MANUAL_RENDER_TEST.md` |
+| 5. Performance | **NOT RUN**: instrumentation added (`AwreCapture#timingStats`); procedure: `docs/MEASUREMENT_PLAN.md` |
+
+Session 27 changes: `tools/ci/render-gate.sh` + `render-gate-test.sh` + `fixtures/` (opt-in render smoke; first stalled stage reported); `integration.sh` honours `RENDER_SMOKE=1`; `ci.yml` gets a `render_smoke` workflow_dispatch input (default off, so default CI is unchanged) and runs the gate tests in the `verify` job; `TimingWindow` (horizon-core) and bounded timing in `AwreCapture`, appended to the `capture:` log line; new `docs/MANUAL_RENDER_TEST.md`, `docs/MEASUREMENT_PLAN.md`. Protocol, tile and cache formats are unchanged. API read-through (source only): `e.blockList()` is used for explosions (the audit's `getBlockList()` failure is already fixed), `getChunkSnapshot(true, true, false)` is called on an already loaded chunk (no load/generation).
+
+Session 27 (part 2) fix: **failed-tile blacklist no longer lasts until reconnect.** `PlayerStreamer` now records failures with the store revision and time; after `retryLimit` failures a tile is held back, then released when its revision changes (immediately) or after a cooldown (default 60 s, doubling per further failure up to 16x; second constructor takes a custom cooldown). `resetFailures()` still exists. Tests: `aBlacklistedTileIsRetriedAfterTheCooldownWithBackoff`, `aNewRevisionClearsTheBlacklistImmediately`, `nonPositiveCooldownIsRejected`; a mutation check (restoring the permanent blacklist) makes the first two fail. Pure Java only; wire/tile/cache formats unchanged; cooldown is a constant, not yet a config key (assumption to measure).
+
+Next tasks (acceptance criteria):
+1. **Fresh builds (P0).** On a machine with network: `gradle build -PjavaRelease=21 --stacktrace` and `gradle -p awre-fabric build --stacktrace` on this tree. Accept: both exit 0, jars produced, logs kept; any compile errors fixed minimally and re-run.
+2. **Render smoke gate (P0).** Run the `integration` job via workflow_dispatch with `render_smoke=true` on the CI runner. Accept: `G3 render smoke` PASS in the summary on 3 consecutive runs before it is ever made default.
+3. **Human-visible test (P0).** Execute `docs/MANUAL_RENDER_TEST.md` baseline. Accept: checks 1-10 each marked PASS/FAIL with screenshots; failures become issues.
+4. **Server cost (P1).** Execute `docs/MEASUREMENT_PLAN.md` at >= 4100 chunks. Accept: capture `tick` p99 < 2 ms, no p95 MSPT regression, then choose `stream.revalidate-seconds` from the data.
+5. **Scaling risks (P1), chosen from measurements:** unbounded `TerrainStore`, `TileLog.open` full read, client store bounded by count not bytes, tile Nether roof, no caves/overhangs.
+
 Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is a local source snapshot, not a claim about the current GitHub branch or latest CI run.
 
 ## Current objective

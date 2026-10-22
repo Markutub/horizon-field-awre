@@ -10,6 +10,10 @@ on:
       mc_version:
         description: Minecraft version
         default: "1.21.11"
+      render_smoke:
+        description: "Make render counters mandatory in the integration job (opt-in; default CI stays informational)"
+        type: boolean
+        default: false
 
 env:
   MC_VERSION: ${{ inputs.mc_version || '1.21.11' }}
@@ -28,6 +32,7 @@ jobs:
       - run: bash tools/verify-core.sh
       - run: bash tools/verify-awre.sh
       - run: bash tools/verify-stream.sh
+      - run: bash tools/ci/render-gate-test.sh
 
   build:
     name: Build Paper plugins + Fabric mod
@@ -109,6 +114,8 @@ jobs:
           echo "$HOME/bin" >> "$GITHUB_PATH"
           "$HOME/bin/headlessmc" --version
       - name: Run integration (see tools/ci/integration.sh for the exact checks)
+        env:
+          RENDER_SMOKE: ${{ inputs.render_smoke && '1' || '0' }}   # opt-in via workflow_dispatch; render counters are mandatory only when 1
         run: bash tools/ci/integration.sh jars
       - name: Summary
         if: always()

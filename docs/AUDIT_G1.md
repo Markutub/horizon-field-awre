@@ -1,5 +1,19 @@
 # AWRE G1 audit (Session 26): defects, fixes, evidence
 
+## 2026-10-22 (Session 27) evidence addendum (LATEST)
+
+The statements above remain as written at audit time ("Gradle/Fabric/CI/in-game NOT RUN" was true then). Evidence since:
+
+| Level | Status for source `dbbaae9` + Session 27 edits |
+|---|---|
+| 1. Pure-Java tests | **VERIFIED, run this session**: core 98 (93 + 5 new `TimingWindowTest`), protocol 67, stream 52 (49 + 3 new retry/backoff tests), render-gate parser tests 13/13 (`tools/ci/render-gate-test.sh`); 0 failures |
+| 2. Fresh root + Fabric Gradle builds | **NOT RUN**: no Gradle, no wrapper at root, no network in the session sandbox. Indirect only: the supplied integration logs show a built plugin and mod loading in CI, so *some* build of an unknown commit succeeded; that is not proof for this snapshot. Session 27 Paper edits (`AwreCapture`, `AwreStreaming`) are syntax-checked only (`tools/ParseOnly.java`: 8 files, 0 errors) and **compile-unverified** |
+| 3. Headless integration | **Supplied logs (not re-run)**: 32 PASS / 0 FAIL; clientA render line `mesh_built=978 gpu_uploaded=974 upload_failed=0 submitted_draws=1255796`. `render-gate.sh` applied offline to the supplied `clientA.log`: PASS. Applied to `clientC.log`: FAIL at "mesh built" as expected (169 tiles inside the vanilla square, `candidates=0`; client C must never be gated) |
+| 4. Human-visible in-game | **NOT VERIFIED**: no display. Procedure: `docs/MANUAL_RENDER_TEST.md` |
+| 5. Performance | **NOT RUN**: instrumentation added (`AwreCapture#timingStats`); procedure: `docs/MEASUREMENT_PLAN.md` |
+
+The original audit's "baseline: 82/82, 48/48" before-numbers are historical; current counts are 93 (+5 Session 27 = 98) / 67 / 49 (+3 Session 27 = 52).
+
 Scope: the G1 repository as received (git HEAD `1e03f0c`, "ci:biome tint"), audited from source. Everything below is labelled
 **VERIFIED** (executed here), **SOURCE** (read in the code, not executed against Paper/Minecraft), or **UNVERIFIED**. Nothing
 about Paper, Fabric, Gradle, CI or in-game rendering was run in this session (no network, no Minecraft): CI is still the compile check
