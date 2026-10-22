@@ -78,6 +78,8 @@ final class AwreStreaming {
     }
 
     void stop() {
+        String finalCapture = captureStats();                   // last capture/timing line goes to the log so CI and operators can read it without /awre
+        if (finalCapture != null) plugin.getLogger().info("[AWRE] " + finalCapture + " (final)");
         if (task != null) task.cancel();
         if (flushTask != null) flushTask.cancel();
         if (capture != null) capture.stop();
@@ -177,6 +179,7 @@ final class AwreStreaming {
 
     private void tickAll() {
         boolean log = ++rounds % 50 == 0;                       // every 5 s
+        if (rounds % 600 == 0) { String cs = captureStats(); if (cs != null) plugin.getLogger().info("[AWRE] " + cs); }   // once a minute
         for (Map.Entry<UUID, Entry> me : entries.entrySet()) {
             Player p = Bukkit.getPlayer(me.getKey());
             Entry e = me.getValue();

@@ -21,5 +21,6 @@ mk 9 4 0 4 0 0 > $T/f.log;                   expect "stall at draw"             
 expect "AWRE renderer exception fails"       1 'renderer exception'                         $T/h.log
 { mk 9 4 0 4 0 5; printf 'java.lang.RuntimeException: other\n\tat net.minecraft.Foo.bar(Foo.java:1)\n'; } > $T/i.log
 expect "unrelated exception ignored"         0 'RENDER-GATE PASS'                           $T/i.log
+{ mk 9 4 0 4 0 5 | sed 's/$/ built_not_resident=2 sample=[0\/1\/2 0\/3\/4]/'; } > $T/j.log; expect "extended line with built_not_resident suffix" 0 'RENDER-GATE PASS' $T/j.log
 expect "unreadable log -> exit 2"            2 'cannot read'                                $T/nope.log
 rm -rf "$T"; [ "$FAIL" -eq 0 ] && echo "render-gate tests: all passed" || { echo "$FAIL render-gate test(s) failed"; exit 1; }

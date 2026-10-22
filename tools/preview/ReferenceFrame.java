@@ -82,6 +82,9 @@ public class ReferenceFrame {
             if (Double.isNaN(zTrue)) continue;                                // ray leaves the 300-block window without hitting ground
             sampled++;
             double zr = zbuf[y * W + x];
+            boolean skyline = true;                                           // no rendered terrain above this pixel: a silhouette pixel, where LOD height averaging
+            for (int yy = y - 1; yy >= 0 && skyline; yy--) if (lodOf[yy * W + x] >= 0) skyline = false;   // legitimately moves the edge by a pixel (not a crack)
+            if (skyline) continue;
             if (zr > zTrue + 6 + 0.15 * zTrue) seeThrough++;                  // beyond LOD averaging error: geometry is missing here
         }
         StringBuilder share = new StringBuilder();
@@ -89,7 +92,7 @@ public class ReferenceFrame {
         System.out.printf("%s | %,d | %.1f | %d | interior holes %d | see-through %d/%d | %s%n", v.name(), tris, 100.0 * covered / (W * H), bandHoles, interior, seeThrough, sampled, share.toString().trim());
         BufferedImage bi = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB); bi.setRGB(0, 0, W, H, img, 0, W);
         javax.imageio.ImageIO.write(bi, "png", new File(out, "frame-" + v.name() + ".png"));
-        // Tolerance from the measured baseline (2026-10-22): clean views <= 1 sample (0.007%), a 20%-tiles-missing mutation >= 1.3%. 0.1% separates them.
+        // Tolerance from the measured baseline (2026-10-22): clean views 0 samples once skyline pixels are excluded (the one earlier sample was a silhouette pixel), a 20%-tiles-missing mutation >= ~1%. 0.1% separates them with margin.
         return (bandHoles > 0 || interior > 0 || seeThrough * 1000L > sampled) ? 1 : 0;
     }
 

@@ -2,7 +2,7 @@
 
 ## 2026-10-22 (Session 27) evidence addendum (LATEST)
 
-Pure-Java suite is now stream 57/57. In-game checks (negative/large coordinates, LOD swaps, dimension change, edit revisions) remain **NOT VERIFIED**; they are checks 3-9 of `docs/MANUAL_RENDER_TEST.md`.
+Pure-Java suite is now stream 58/58. In-game checks (negative/large coordinates, LOD swaps, dimension change, edit revisions) remain **NOT VERIFIED**; they are checks 3-9 of `docs/MANUAL_RENDER_TEST.md`.
 
 Status: **IN PROGRESS. Pure-Java part done and tested (Session 19). In-game checks NOT VERIFIED.**
 

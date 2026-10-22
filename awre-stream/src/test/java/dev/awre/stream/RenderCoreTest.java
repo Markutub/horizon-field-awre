@@ -260,4 +260,20 @@ class RenderCoreTest {
             assertEquals(1, gpu.uploads, "the empty mesh needs no GPU buffer");
         }
     }
+
+    @Test void builtButNotYetResidentMeshesAreReportedAndDrainUnderTheUploadBudget() {
+        Store s = new Store(); FakeGpu gpu = new FakeGpu();
+        for (int i = 0; i < 5; i++) s.put(0, 10 + i, 0, 1, 64);
+        var l = new MeshResidency.Limits(1000, 1L << 30, 1, 1L << 30);      // one upload per sync
+        HorizonDrawPlanner<Integer> p = planner(s, gpu, l);
+        p.tick(0, 0, 0, 5000, null); p.frame(0, 80, 0);
+        int waiting = p.builtNotResident().size();
+        assertTrue(waiting > 0 && waiting < 5, "some meshes are built but still waiting for an upload slot: " + waiting);
+        assertTrue(p.diagnosticsLine().contains(" built_not_resident=" + waiting + " sample=["), p.diagnosticsLine());
+        for (int i = 0; i < 10; i++) { p.tick(0, 0, 0, 5000, null); p.frame(0, 80, 0); }
+        assertEquals(0, p.builtNotResident().size(), "the backlog drains");
+        assertTrue(p.diagnosticsLine().endsWith(" built_not_resident=0"), p.diagnosticsLine());
+        assertTrue(p.diagnosticsLine().matches(".* gpu_uploaded=5 .*"), "legacy counters keep their format for render-gate.sh");
+        p.close();
+    }
 }

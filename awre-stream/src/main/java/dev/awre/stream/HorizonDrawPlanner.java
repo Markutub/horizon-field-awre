@@ -74,13 +74,35 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
                 drawsLastFrame, trianglesLastFrame, drawsSubmitted, framesWithDraws);
     }
 
+    /** Meshes the view has built that hold no GPU slot right now (waiting for the bounded upload budget, over a residency cap, or not wanted). Sorted for stable logs. */
+    public List<TileKey> builtNotResident() {
+        java.util.Set<TileKey> b = view.meshedKeys();
+        b.removeAll(residency.keys());
+        List<TileKey> out = new ArrayList<>(b);
+        out.sort(java.util.Comparator.comparing((TileKey k) -> k.lod()).thenComparing(k -> k.tileX()).thenComparing(k -> k.tileZ()));
+        return out;
+    }
+
     public String diagnosticsLine() {
         Diagnostics d = diagnostics();
         return "received=" + d.tilesReceived() + " mesh_built=" + d.meshesBuilt() + " mesh_failed=" + d.meshFailures()
                 + " gpu_uploaded=" + d.uploads() + " upload_failed=" + d.uploadFailures() + " gpu_freed=" + d.freed()
                 + " gpu_resident=" + d.resident() + " gpu_bytes=" + d.residentBytes()
                 + " planned_draws=" + d.drawsLastFrame() + " planned_tris=" + d.trianglesLastFrame()
-                + " submitted_draws=" + d.drawsSubmittedTotal() + " submitted_frames=" + d.framesWithDraws();
+                + " submitted_draws=" + d.drawsSubmittedTotal() + " submitted_frames=" + d.framesWithDraws()
+                + notResidentSuffix();
+    }
+
+    /** Appended AFTER the legacy counters so existing parsers keep working: " built_not_resident=N [lod/tx/tz ...]" (first 4). */
+    private String notResidentSuffix() {
+        List<TileKey> l = builtNotResident();
+        StringBuilder sb = new StringBuilder(" built_not_resident=").append(l.size());
+        if (!l.isEmpty()) {
+            sb.append(" sample=[");
+            for (int i = 0; i < Math.min(4, l.size()); i++) sb.append(i == 0 ? "" : " ").append(l.get(i).lod()).append('/').append(l.get(i).tileX()).append('/').append(l.get(i).tileZ());
+            sb.append(']');
+        }
+        return sb.toString();
     }
 
     /** Frees all GPU meshes and forgets the plan (disconnect, dimension change, shutdown). The view keeps running. Idempotent. */

@@ -1,7 +1,7 @@
-# ReferenceFrame output (CPU geometry check, NOT an in-game render), 2026-10-22, Session 28
+# ReferenceFrame output (CPU geometry check, NOT an in-game render), regenerated 2026-10-22, Session 29 (skyline-aware see-through check)
 view | tris drawn | covered % | near-ground band uncovered px | interior holes | see-through (rendered farther than true ground, <=300 blocks) | lod tint share (L0..L6) %
 origin | 262,840 | 66.6 | 0 | interior holes 0 | see-through 0/16968 | 99 1 0 0 0 0 0
 origin-diagonal | 261,168 | 70.5 | 0 | interior holes 0 | see-through 0/17908 | 100 0 0 0 0 0 0
-negative | 257,469 | 58.1 | 0 | interior holes 0 | see-through 1/14296 | 91 8 0 0 0 0 0
+negative | 257,469 | 58.1 | 0 | interior holes 0 | see-through 0/14296 | 91 8 0 0 0 0 0
 large | 260,534 | 65.0 | 0 | interior holes 0 | see-through 0/16614 | 100 0 0 0 0 0 0
 REFERENCE-FRAME PASS (geometry only; see docs/MANUAL_RENDER_TEST.md for the real frame)

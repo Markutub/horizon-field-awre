@@ -124,6 +124,8 @@ check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizo
 if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
 if grep -Eq '\[AWRE\] render: .*submitted_draws=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) draw calls submitted"; else echo "INFO: G3 no submitted draws logged"; fi
 grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
+echo "--- capture/timing lines (server, informational; see docs/MEASUREMENT_PLAN.md) ---"
+grep -h '\[AWRE\] capture:' "$OUT"/server*.log 2>/dev/null | tail -3 || true
 if [ "$RENDER_SMOKE" = "1" ]; then
   # Opt-in render-smoke: only meaningful where the client reaches the world-render event. Applies to client A only
   # (client C's tiles sit inside the vanilla render square, so candidates=0 there is expected, not a defect).
