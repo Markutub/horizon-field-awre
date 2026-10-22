@@ -1,5 +1,7 @@
 package dev.horizonfield.core;
 
+import dev.horizonfield.core.terrain.BiomeTint;
+
 /** Converts a {@link ChunkView} into a {@link ColumnTile}. Pure and thread-safe: safe to run on worker threads. */
 public final class TerrainAnalyzer {
     private final MaterialPalette palette;
@@ -18,7 +20,9 @@ public final class TerrainAnalyzer {
                     mat[i] = (short) MaterialPalette.AIR;
                 } else {
                     top[i] = (short) y;
-                    mat[i] = (short) palette.idOf(view.blockKey(lx, y, lz));
+                    String key = view.blockKey(lx, y, lz);
+                    if (BiomeTint.tintable(key)) key = BiomeTint.tag(key, view.biomeKey(lx, y, lz));   // grass/foliage/water carry their biome
+                    mat[i] = (short) palette.idOf(key);
                 }
             }
         }

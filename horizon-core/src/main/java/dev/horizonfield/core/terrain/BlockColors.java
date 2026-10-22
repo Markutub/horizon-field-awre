@@ -33,6 +33,15 @@ public final class BlockColors {
     /** Opaque ARGB for a block key; air and unknown-air give 0 (fully transparent). */
     public static int argb(String key) {
         if (key == null || key.endsWith(":air") || key.endsWith("_air")) return 0;
+        if (BiomeTint.isTagged(key)) {                       // "minecraft:grass_block/biome/minecraft:desert": see BiomeTint
+            String base = BiomeTint.baseOf(key);
+            Integer ov = overrides.lookup(key);
+            if (ov == null) ov = overrides.lookup(base);
+            if (ov != null) return ov;
+            BiomeTint.Kind kind = BiomeTint.kindOf(base);
+            if (kind != BiomeTint.Kind.NONE) return BiomeTint.color(kind, BiomeTint.biomeOf(key));
+            key = base;                                       // a tag on a block that is not tinted: ignore it
+        }
         Integer o = overrides.lookup(key);
         if (o != null) return o;
         Integer c = TABLE.get(key);

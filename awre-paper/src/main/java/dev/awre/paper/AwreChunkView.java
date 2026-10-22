@@ -24,4 +24,9 @@ final class AwreChunkView implements ChunkView {
     }
 
     @Override public String blockKey(int lx, int y, int lz) { return snap.getBlockType(lx, y, lz).getKey().toString(); }
+
+    /** Biome of the block position (3D biomes), as a namespaced key; null if the snapshot cannot tell. API-ASSUMPTION: ChunkSnapshot#getBiome(x, y, z) and Keyed#getKey on Biome. */
+    @Override public String biomeKey(int lx, int y, int lz) {
+        try { return snap.getBiome(lx, y, lz).getKey().toString(); } catch (RuntimeException e) { return null; }
+    }
 }

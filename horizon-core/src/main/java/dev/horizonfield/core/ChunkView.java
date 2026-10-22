@@ -9,4 +9,6 @@ public interface ChunkView {
     int highestBlockY(int localX, int localZ);
     /** Namespaced key of the block at the given local position. */
     String blockKey(int localX, int y, int localZ);
+    /** Namespaced biome key at the position (e.g. "minecraft:plains"), or null if the view cannot tell. Used only to tint grass, foliage and water. */
+    default String biomeKey(int localX, int y, int localZ) { return null; }
 }

@@ -39,6 +39,7 @@ public final class AwreClientMod implements ClientModInitializer {
         decision.notes().forEach(LOG::info);
         boolean renderEnabled = decision.renderEnabled();
         loadColorOverrides();
+        loadBiomeOverrides();
         shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
 
         double maxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
@@ -93,6 +94,20 @@ public final class AwreClientMod implements ClientModInitializer {
             dev.horizonfield.core.terrain.BlockColors.setOverrides(o);
             LOG.info("[AWRE] colour overrides: {} rules from {}", o.size(), f.getFileName());
             for (String r : o.rejected()) LOG.warn("[AWRE] awre-colors.txt {}", r);
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("[AWRE] could not read {}: {}", f.getFileName(), e.toString());
+        }
+    }
+
+    /** config/awre-biomes.txt: "biome_id = grass:#RRGGBB foliage:#RRGGBB water:#RRGGBB" for biomes from worldgen mods (see BiomeTint). */
+    private static void loadBiomeOverrides() {
+        java.nio.file.Path f = FabricLoader.getInstance().getConfigDir().resolve("awre-biomes.txt");
+        if (!java.nio.file.Files.isRegularFile(f)) return;
+        try {
+            var p = dev.horizonfield.core.terrain.BiomeTint.parse(java.nio.file.Files.readAllLines(f));
+            dev.horizonfield.core.terrain.BiomeTint.setOverrides(p.overrides());
+            LOG.info("[AWRE] biome overrides: {} biomes from {}", p.overrides().size(), f.getFileName());
+            for (String r : p.rejected()) LOG.warn("[AWRE] awre-biomes.txt {}", r);
         } catch (java.io.IOException | RuntimeException e) {
             LOG.warn("[AWRE] could not read {}: {}", f.getFileName(), e.toString());
         }
