@@ -171,4 +171,18 @@ class WorldCorrectnessTest {
         TileKey coarse = a.lod() >= b.lod() ? a : b, fine = coarse == a ? b : a;
         return Math.floorDiv(fine.tileX(), 1 << (coarse.lod() - fine.lod())) == coarse.tileX() && Math.floorDiv(fine.tileZ(), 1 << (coarse.lod() - fine.lod())) == coarse.tileZ();
     }
+
+    @Test void meshesBuiltByTheViewHaveSkirtsDownToTheFloor() {
+        Store s = new Store();
+        s.put(key(0, 10, 0), 1, 200);
+        try (ClientHorizonView v = new ClientHorizonView(s, 10, 10, Runnable::run)) {
+            v.update(0, 0, 0, 5000, null);
+            var d = v.update(0, 0, 0, 5000, null);
+            assertEquals(1, d.size());
+            double low = Double.MAX_VALUE;
+            TerrainMesher.Mesh m = d.get(0).mesh();
+            for (int i = 0; i < m.vertexCount(); i++) low = Math.min(low, m.positions[i * 3 + 1]);
+            assertTrue(low <= ClientHorizonView.SKIRT_FLOOR_Y, "lowest vertex " + low);
+        }
+    }
 }

@@ -58,6 +58,9 @@ public final class ClientHorizonView implements AutoCloseable {
     public record Stats(int held, int candidates, int ready, int hiddenByVanilla, int hiddenByFiner, int tooFar, int drawn,
                         long triangles, int pending, long built, long failures) { }
 
+    /** Skirts hang to this absolute height (overworld build floor). Dimensions with a lower floor would show a thin gap only below it. */
+    public static final double SKIRT_FLOOR_Y = -64;
+
     private record Built(long revision, TerrainMesher.Mesh mesh) { }
 
     private final TileSource source;
@@ -233,7 +236,7 @@ public final class ClientHorizonView implements AutoCloseable {
         try {
             LodTile tile = LodTileCodec.decode(new LodKey(key.lod(), key.tileX(), key.tileZ()), rec.decoded());
             List<String> pal = source.palette(key);
-            TerrainMesher.Mesh m = TerrainMesher.meshLocal(tile, id -> id >= 0 && id < pal.size() ? pal.get(id) : "minecraft:air", Math.max(4, 2 << key.lod()));
+            TerrainMesher.Mesh m = TerrainMesher.meshLocalToFloor(tile, id -> id >= 0 && id < pal.size() ? pal.get(id) : "minecraft:air", SKIRT_FLOOR_Y);
             built.put(key, new Built(rec.revision(), m));
             failedAt.remove(key);
             builtCount.incrementAndGet();

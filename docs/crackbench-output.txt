@@ -1,0 +1,14 @@
+
+== terrain amplitude x1 (synthetic)
+lod0 border samples=520192 max step=2 | current max(4,2<<lod): 0 cracks, 0 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod1 border samples=129024 max step=3 | current max(4,2<<lod): 0 cracks, 0 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod2 border samples=31744 max step=6 | current max(4,2<<lod): 0 cracks, 0 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod3 border samples=7680 max step=9 | current max(4,2<<lod): 0 cracks, 0 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod4 border samples=1792 max step=18 | current max(4,2<<lod): 0 cracks, 0 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+
+== terrain amplitude x3 (synthetic)
+lod0 border samples=520192 max step=6 | current max(4,2<<lod): 9595 cracks, 10721 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod1 border samples=129024 max step=9 | current max(4,2<<lod): 13253 cracks, 41160 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod2 border samples=31744 max step=15 | current max(4,2<<lod): 3457 cracks, 29832 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod3 border samples=7680 max step=28 | current max(4,2<<lod): 927 cracks, 27872 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |
+lod4 border samples=1792 max step=53 | current max(4,2<<lod): 175 cracks, 19040 block^2 | 16+(8<<lod): 0 cracks, 0 block^2 | constant 320 (to the floor): 0 cracks, 0 block^2 |

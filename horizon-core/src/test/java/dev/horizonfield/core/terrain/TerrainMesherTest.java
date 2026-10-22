@@ -136,4 +136,34 @@ class TerrainMesherTest {
         for (int v = 0; v < abs.vertexCount(); v++) worst = Math.max(worst, Math.abs(abs.positions[v * 3] - Math.rint(abs.positions[v * 3] / 2) * 2));
         assertTrue(worst < 1e-6, "absolute floats near 3e7 only land on multiples of 2");
     }
+
+    /** Lowest y of the SKIRT vertices lying on the plane x = planeX (local coordinates) of a mesh. */
+    private static double lowestSkirtOnPlaneX(TerrainMesher.Mesh m, float planeX) {
+        double low = Double.MAX_VALUE;
+        for (int v = 0; v < m.vertexCount(); v++)
+            if (m.faces[v] == TerrainMesher.Face.SKIRT.ordinal() && m.positions[v * 3] == planeX) low = Math.min(low, m.positions[v * 3 + 1]);
+        return low;
+    }
+
+    @Test void skirtToTheFloorClosesCracksThatAFixedDepthLeavesOpen() {
+        LodTile high = tile(0, 0, 0, (x, z) -> 200, (x, z) -> 2);        // east border x=16, top 200 -> wall top y 201
+        double lowerNeighbourSurface = 60 + 1;                             // neighbour tile top 60 -> surface y 61
+        double fixed = lowestSkirtOnPlaneX(TerrainMesher.meshLocal(high, PAL, 4), 16f);
+        assertTrue(fixed > lowerNeighbourSurface, "fixed 4-block skirt ends at " + fixed + ": a visible gap above y=61 (the bug being fixed)");
+        double floor = lowestSkirtOnPlaneX(TerrainMesher.meshLocalToFloor(high, PAL, -64), 16f);
+        assertTrue(floor <= -64 && floor <= lowerNeighbourSurface, "floor skirt ends at " + floor);
+        // no extra triangles
+        assertEquals(TerrainMesher.meshLocal(high, PAL, 4).triangleCount(), TerrainMesher.meshLocalToFloor(high, PAL, -64).triangleCount());
+    }
+
+    @Test void floorSkirtNeverHangsUpwardOnTilesLowerThanTheFloor() {
+        LodTile deep = tile(0, 0, 0, (x, z) -> -100, (x, z) -> 2);         // top below the floor: skirt must still go DOWN from the top
+        TerrainMesher.Mesh m = TerrainMesher.meshLocalToFloor(deep, PAL, -64);
+        for (int t = 0; t < m.indices.length; t += 3) {
+            double[] n = m.normal(t);
+            assertTrue(Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]) > 0, "no degenerate triangles");
+        }
+        double top = -100 + 1;
+        for (int v = 0; v < m.vertexCount(); v++) assertTrue(m.positions[v * 3 + 1] <= top + 1e-4, "nothing above the tile top");
+    }
 }

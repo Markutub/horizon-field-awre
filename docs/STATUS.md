@@ -20,6 +20,10 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
+## Session 21 (PHASE_03 start) summary
+
+Measured tile-border cracks on synthetic terrain (`tools/bench/CrackBench.java`, `docs/crackbench-output.txt`): fixed-depth skirts leave thousands of open border samples on mountainous terrain; fixed by skirts to the floor (`meshLocalToFloor`). core 73/73, protocol 67/67, stream 39/39. Not real-terrain data; not verified in game. See `docs/phases/PHASE_03.md`.
+
 ## Session 19 (PHASE_02) summary
 
 User reported "all green" (not independently visible). Added `DimensionGate` (fixes old-dimension meshes being re-uploaded after a dimension change), `WorldCorrectnessTest` (6 tests incl. a 400-iteration randomized, mutation-checked coverage property). Pure-Java: core 71/71, protocol 67/67, stream 38/38. Details and open items: `docs/phases/PHASE_02.md`.

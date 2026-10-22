@@ -1,5 +1,8 @@
 # HANDOFF — read this first (for the next AI / developer)
 
+## Session 21 addendum (LATEST) — PHASE_03 started while CI for the session-20 fix was pending
+Added CrackBench + floor skirts (docs/phases/PHASE_03.md). The Fabric build result of the session-20 `Camera#rotation()` fix was not available. Next: read that CI run first; then real-terrain CrackBench on a real `.hfl`.
+
 ## Session 20 addendum (LATEST) — first real Fabric build result
 User supplied the CI log of `gradle -p awre-fabric build` on session 18 code: Loom 1.14.10, ONE error: `WorldRenderContext.positionMatrix()` does not exist (AwreClientMod:56). Everything else javac checked compiled. Fixed by building the view matrix from `Camera#rotation()`. Re-run CI; if the next error is in `HorizonRenderer` (blaze3d names), fix those one by one; the list is in PHASE_01.md. Loom warning "Cannot remap modifiers because it does not exists in any of the targets []" was in the log; it did not stop the build.
 

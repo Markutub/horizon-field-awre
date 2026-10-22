@@ -65,16 +65,24 @@ public final class TerrainMesher {
     private TerrainMesher() { }
 
     /** @param paletteKey material id -> block key (e.g. the client's palette); @param skirtDepth blocks the skirts hang down. Positions are ABSOLUTE world coordinates (float: exact only below 2^24 blocks). */
-    public static Mesh mesh(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, false); }
+    public static Mesh mesh(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, false, Double.NaN); }
 
     /**
      * Same geometry, but x/z are relative to the tile's world origin ({@link Mesh#originX}/{@link Mesh#originZ}, kept as doubles).
      * Local values are multiples of 2^lod below 16*2^lod, so they are exact in float at any world coordinate; a renderer adds
      * (origin - camera) in double precision per tile. Use this for GPU upload.
      */
-    public static Mesh meshLocal(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, true); }
+    public static Mesh meshLocal(LodTile t, IntFunction<String> paletteKey, double skirtDepth) { return build(t, paletteKey, skirtDepth, true, Double.NaN); }
 
-    private static Mesh build(LodTile t, IntFunction<String> paletteKey, double skirtDepth, boolean local) {
+    /**
+     * Like {@link #meshLocal} but every skirt hangs down to the absolute height {@code floorY} instead of a fixed depth. A tile cannot know how
+     * much lower its neighbour is, and a fixed depth leaves a see-through crack wherever the neighbour is lower by more than that
+     * (docs/crackbench-output.txt: thousands of such border samples on mountainous synthetic terrain). A skirt to the world floor needs no
+     * extra triangles and cannot leave a gap, at the price of overdraw hidden under the terrain.
+     */
+    public static Mesh meshLocalToFloor(LodTile t, IntFunction<String> paletteKey, double floorY) { return build(t, paletteKey, 0, true, floorY); }
+
+    private static Mesh build(LodTile t, IntFunction<String> paletteKey, double skirtDepth, boolean local, double floorY) {
         final int n = LodTile.SIDE;
         final double cell = 1 << t.key().lod();
         final double tileX = (double) t.key().tx() * n * cell, tileZ = (double) t.key().tz() * n * cell;
@@ -127,7 +135,7 @@ public final class TerrainMesher {
                         if (w2 == null || w2[0] != w[0] || w2[1] != w[1] || w2[2] != w[2] || color[nz * n + nx] != color[sz * n + sx]) break;
                         len++;
                     }
-                    emitWall(b, dir, alongX, sx, sz, len, w, color[sz * n + sx], ox, oz, cell, skirtDepth);
+                    emitWall(b, dir, alongX, sx, sz, len, w, color[sz * n + sx], ox, oz, cell, skirtDepth, floorY);
                     run += len;
                 }
             }
@@ -150,9 +158,9 @@ public final class TerrainMesher {
         return nt < top[i] ? new int[]{nt + 1, top[i] + 1, 0} : null;
     }
 
-    private static void emitWall(Builder b, int dir, boolean alongX, int sx, int sz, int len, int[] w, int color, double ox, double oz, double cell, double skirtDepth) {
+    private static void emitWall(Builder b, int dir, boolean alongX, int sx, int sz, int len, int[] w, int color, double ox, double oz, double cell, double skirtDepth, double floorY) {
         boolean skirt = w[2] == 1;
-        double yHigh = w[1], yLow = skirt ? w[1] - skirtDepth : w[0];
+        double yHigh = w[1], yLow = skirt ? (Double.isNaN(floorY) ? w[1] - skirtDepth : Math.min(floorY, w[1] - 1.0)) : w[0];
         Face f = skirt ? Face.SKIRT : Face.values()[1 + dir];
         double a0, a1;                                      // extent along the run
         double fixed;                                       // the coordinate of the edge plane
