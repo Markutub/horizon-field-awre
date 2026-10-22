@@ -2,7 +2,7 @@
 # Tests for render-gate.sh (no Minecraft, no network). Usage: bash tools/ci/render-gate-test.sh
 set -uo pipefail
 cd "$(dirname "$0")"
-G=./render-gate.sh; T=$(mktemp -d); FAIL=0
+G="bash ./render-gate.sh"; T=$(mktemp -d); FAIL=0
 mk() { printf '[00:00:00] [Render thread/INFO]: [AWRE] render: received=%s mesh_built=%s mesh_failed=%s gpu_uploaded=%s upload_failed=%s gpu_freed=0 gpu_resident=1 gpu_bytes=1 planned_draws=1 planned_tris=1 submitted_draws=%s submitted_frames=1\n' "$@"; }
 expect() { # expect <name> <exit> <stdout-regex> <logfile>
   out=$($G "$4" 2>&1); rc=$?

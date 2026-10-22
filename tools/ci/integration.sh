@@ -127,7 +127,7 @@ grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
 if [ "$RENDER_SMOKE" = "1" ]; then
   # Opt-in render-smoke: only meaningful where the client reaches the world-render event. Applies to client A only
   # (client C's tiles sit inside the vanilla render square, so candidates=0 there is expected, not a defect).
-  GATE_OUT=$("$GATE" "$OUT/clientA.log" 2>&1); GATE_RC=$?
+  GATE_OUT=$(bash "$GATE" "$OUT/clientA.log" 2>&1); GATE_RC=$?
   echo "$GATE_OUT"
   if [ "$GATE_RC" -eq 0 ]; then pass "G3 render smoke: mesh built, GPU uploaded, draws submitted, no AWRE renderer exception"
   else fail "G3 render smoke: ${GATE_OUT#RENDER-GATE FAIL: }"; fi
