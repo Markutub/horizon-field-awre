@@ -76,7 +76,15 @@ public final class ClientHorizonView implements AutoCloseable {
     private List<Box> lastOrder = List.of();
     private double lastCamX, lastCamZ, lastVanilla, lastMaxDistance;
 
-    public ClientHorizonView(ClientSession session, int maxMeshes) { this(TileSource.of(session), maxMeshes, 4); }
+    /**
+     * Build jobs queued per {@link #update} call. {@code update} runs at ~10 Hz and schedules at most this many jobs, so the build
+     * throughput is {@code DEFAULT_MAX_IN_FLIGHT x 10} tiles per second however fast the mesher is. The CI client measured exactly
+     * 40 tiles/s with the former value 4 (~40 s from the end of the stream to a complete horizon) while the mesher needs about 0.14 ms
+     * per tile. 64 meshes a 1600-tile horizon in 2.5 s and costs the background thread about 9 ms per burst; the queue stays bounded.
+     */
+    public static final int DEFAULT_MAX_IN_FLIGHT = 64;
+
+    public ClientHorizonView(ClientSession session, int maxMeshes) { this(TileSource.of(session), maxMeshes, DEFAULT_MAX_IN_FLIGHT); }
 
     public ClientHorizonView(TileSource source, int maxMeshes, int maxInFlight) {
         this.source = source;

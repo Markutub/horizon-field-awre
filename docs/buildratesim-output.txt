@@ -1,0 +1,7 @@
+streamed tiles held by the client: 2128  (vanilla radius 192 blocks, stationary camera)
+maxInFlight=  4: 1588 candidates meshed after  397 updates =  39.7 s of game time at 10 Hz (  40 tiles/s); total mesher CPU here 1387 ms (0.87 ms/tile)
+maxInFlight=  8: 1588 candidates meshed after  199 updates =  19.9 s of game time at 10 Hz (  80 tiles/s); total mesher CPU here 627 ms (0.39 ms/tile)
+maxInFlight= 16: 1588 candidates meshed after  100 updates =  10.0 s of game time at 10 Hz ( 159 tiles/s); total mesher CPU here 360 ms (0.23 ms/tile)
+maxInFlight= 32: 1588 candidates meshed after   50 updates =   5.0 s of game time at 10 Hz ( 318 tiles/s); total mesher CPU here 242 ms (0.15 ms/tile)
+maxInFlight= 64: 1588 candidates meshed after   25 updates =   2.5 s of game time at 10 Hz ( 635 tiles/s); total mesher CPU here 228 ms (0.14 ms/tile)
+maxInFlight=128: 1588 candidates meshed after   13 updates =   1.3 s of game time at 10 Hz (1222 tiles/s); total mesher CPU here 129 ms (0.08 ms/tile)

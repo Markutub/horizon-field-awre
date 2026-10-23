@@ -1,6 +1,6 @@
 # AI_CONTEXT — Horizon Field / AWRE
 
-Last verified: 2026-10-22 (Session 26, G1 audit) on git HEAD 1e03f0c plus the audit changes; pure-Java: core 93 / protocol 67 / stream 49 pass; Gradle/Fabric/CI/in-game NOT run. Audit and fixes: `docs/AUDIT_G1.md`.
+Last verified: 2026-10-23 (Session 31) on git HEAD fa3148b plus Session 30-31 edits; pure-Java: core 98 / protocol 67 / stream 64 / render-gate 15 pass; CI integration of an earlier tree 32 PASS / 0 FAIL (user-supplied logs); Gradle/Fabric/in-game NOT run this session. Evidence and open items: `docs/HANDOFF.md`.
 
 ## Purpose and current phase
 

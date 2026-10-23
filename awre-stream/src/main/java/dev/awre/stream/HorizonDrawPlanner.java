@@ -93,10 +93,26 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
                 + notResidentSuffix();
     }
 
-    /** Appended AFTER the legacy counters so existing parsers keep working: " built_not_resident=N [lod/tx/tz ...]" (first 4). */
+    /**
+     * Splits {@link #builtNotResident()} into {@code [notWanted, waiting]}: meshes the CURRENT plan does not want (inside the vanilla
+     * square, hidden by finer tiles, too far; the view keeps them as a CPU cache, or they were built just before the camera or the
+     * render distance changed) versus meshes the plan wants that wait for an upload slot (bounded upload budget or residency cap).
+     * The first kind is normal, the second drains within a few frames; a persistent {@code waiting} count would be a defect.
+     */
+    public int[] builtNotResidentSplit() {
+        java.util.Set<TileKey> b = view.meshedKeys();
+        b.removeAll(residency.keys());
+        int waiting = 0;
+        for (ClientHorizonView.Drawable d : wanted) if (b.contains(d.key())) waiting++;
+        return new int[]{b.size() - waiting, waiting};
+    }
+
+    /** Appended AFTER the legacy counters so existing parsers keep working: " built_not_wanted=K built_waiting=M built_not_resident=N [lod/tx/tz ...]" (first 4). */
     private String notResidentSuffix() {
         List<TileKey> l = builtNotResident();
-        StringBuilder sb = new StringBuilder(" built_not_resident=").append(l.size());
+        int[] split = builtNotResidentSplit();
+        StringBuilder sb = new StringBuilder(" built_not_wanted=").append(split[0]).append(" built_waiting=").append(split[1])
+                .append(" built_not_resident=").append(l.size());
         if (!l.isEmpty()) {
             sb.append(" sample=[");
             for (int i = 0; i < Math.min(4, l.size()); i++) sb.append(i == 0 ? "" : " ").append(l.get(i).lod()).append('/').append(l.get(i).tileX()).append('/').append(l.get(i).tileZ());

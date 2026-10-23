@@ -63,6 +63,14 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
+## Session 31 summary
+
+From the supplied CI logs: the `built - uploaded = 4` gap is a sampling artifact (render line logged right after the 10 Hz plan refresh). Real finding: client mesh throughput was capped at 40 tiles/s (`maxInFlight` 4 x 10 Hz updates; measured 40.8 / 39.4 / 40.8 / 40.0 per second in the CI log; mesher itself ~0.14 ms/tile). `ClientHorizonView.DEFAULT_MAX_IN_FLIGHT = 64` (model: 39.7 s -> 2.5 s for ~1600 tiles), `MeshThroughputTest` (3). Pure Java: core 98, protocol 67, stream 64, render-gate 15. CI confirmation of the new rate pending. Reference-frame PNGs from CI are byte-identical to the sandbox renders. Details: `docs/HANDOFF.md` (Session 31).
+
+## Session 30 summary
+
+The CI `mesh_built - gpu_uploaded = 4` observation was reproduced offline with the real server -> client -> view -> planner chain (`tools/bench/run-residencysim.sh`, `docs/residencysim-output.txt`): no gap for a stationary camera; a gap of the same shape appears when the camera or render distance changes early (mesh finished for a plan that changed before its upload slot), with `built_waiting=0`. Hypothesis "parent hidden by children" refuted (quadtree leaves only). Render line now splits `built_not_wanted` / `built_waiting`; 3 new tests (`ResidencyAccountingTest`), gate parser case added. Pure-Java: core 98, protocol 67, stream 61, render-gate 15. The next CI render line decides whether it is benign. Details: `docs/HANDOFF.md` (Session 30).
+
 ## Session 26 (G1 audit) summary
 
 Full report: `docs/AUDIT_G1.md`. Three confirmed defects fixed in source with regression tests: (D1) capture requests beyond the 4096-queue were silently lost (`CaptureBacklog`; premise test shows 665 of 4761 chunks lost); (D2) terrain changed by anything but player place/break was never re-observed (new event handlers + `stream.revalidate-seconds` sweep; pipeline test `RevalidationSweepTest`); (D3) server heap 1.32 KB/chunk unbounded growth, measured, now 0.43 KB/chunk via packed `ColumnTile`. Also E1: snapshots were taken without biome data. Pure-Java: core 93/93, protocol 67/67, stream 49/49. Paper/Fabric changes are syntax-checked only (CI is the compile check). Main-thread cost of capture/sweep UNMEASURED. Next: run CI, then measure on a real server (see AUDIT_G1 section 7).

@@ -1,0 +1,15 @@
+== scenario: final radius 192 blocks, 0 ticks at camera (0,0) radius 192
+vanilla radius 192.0 blocks: mesh_built=1588 mesh_failed=0 gpu_uploaded=1588 upload_failed=0 gpu_freed=0 gpu_resident=1588 built_not_wanted=0 built_waiting=0 built_not_resident=0
+view: held=2128 candidates=1588 ready=1588 hidden_vanilla=540 hidden_finer=0 too_far=0 drawn=1588 built(lifetime)=1588
+built_not_resident=0  of which all 4 children built (=> hidden parent): 0  first=[]
+lifetime: uploads - built = 0
+== scenario: final radius 192 blocks, 40 ticks at camera (0,0) radius 32
+vanilla radius 192.0 blocks: mesh_built=1852 mesh_failed=0 gpu_uploaded=1848 upload_failed=0 gpu_freed=260 gpu_resident=1588 built_not_wanted=264 built_waiting=0 built_not_resident=264 sample=[0/-5/-7 0/-5/-6 0/-5/-5 0/-5/-4]
+view: held=2128 candidates=1588 ready=1588 hidden_vanilla=540 hidden_finer=0 too_far=0 drawn=1588 built(lifetime)=1852
+built_not_resident=264  of which all 4 children built (=> hidden parent): 0  first=[0/-5/-7, 0/-5/-6, 0/-5/-5, 0/-5/-4, 0/-5/3, 0/-5/4]
+lifetime: uploads - built = 4
+== scenario: final radius 192 blocks, 5 ticks at camera (700,700) radius 192
+vanilla radius 192.0 blocks: mesh_built=1659 mesh_failed=0 gpu_uploaded=1659 upload_failed=0 gpu_freed=68 gpu_resident=1591 built_not_wanted=0 built_waiting=0 built_not_resident=0
+view: held=2131 candidates=1591 ready=1591 hidden_vanilla=540 hidden_finer=0 too_far=0 drawn=1591 built(lifetime)=1659
+built_not_resident=0  of which all 4 children built (=> hidden parent): 0  first=[]
+lifetime: uploads - built = 0
