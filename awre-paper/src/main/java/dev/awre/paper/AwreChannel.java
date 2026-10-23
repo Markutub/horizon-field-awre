@@ -69,9 +69,12 @@ public final class AwreChannel implements PluginMessageListener, Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        sessions.remove(e.getPlayer().getUniqueId());
+        boolean hadSession = sessions.remove(e.getPlayer().getUniqueId()) != null;
         AwreStreaming st = streaming;
-        if (st != null) st.detach(e.getPlayer().getUniqueId());
+        boolean wasStreaming = st != null && st.detach(e.getPlayer().getUniqueId());
+        // G2 audit: the cleanup was silent, so CI could not assert it. Logged only for AWRE players (vanilla quits stay quiet).
+        if (hadSession || wasStreaming) plugin.getLogger().info("[AWRE] " + e.getPlayer().getName() + " quit: session " + (hadSession ? "dropped" : "none")
+                + ", stream " + (wasStreaming ? "detached" : "none") + ", sessions left " + sessions.size());
     }
 
     @Override

@@ -130,7 +130,8 @@ public final class ClientRuntime<H> {
             var s = v.stats();
             String line = "held=" + s.held() + " candidates=" + s.candidates() + " ready=" + s.ready() + " drawn=" + s.drawn()
                     + " hidden_vanilla=" + s.hiddenByVanilla() + " hidden_finer=" + s.hiddenByFiner() + " too_far=" + s.tooFar()
-                    + " tris=" + s.triangles() + " pending=" + s.pending() + " failures=" + s.failures();
+                    + " tris=" + s.triangles() + " pending=" + s.pending() + " failures=" + s.failures()
+                    + " over_cap=" + s.overCap() + " vanilla_radius=" + (int) vanillaRadius;   // appended: CI parses the leading fields by prefix
             if (!line.equals(lastViewLog)) { lastViewLog = line; host.info("[AWRE] horizon view: " + line); }
             host.info("[AWRE] render: " + pl.diagnosticsLine());
             if (s.held() > 0 && s.candidates() == 0 && s.hiddenByVanilla() == 0 && s.tooFar() == 0)

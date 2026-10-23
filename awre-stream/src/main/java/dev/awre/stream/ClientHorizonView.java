@@ -55,8 +55,9 @@ public final class ClientHorizonView implements AutoCloseable {
 
     public record Drawable(TileKey key, long revision, TerrainMesher.Mesh mesh) { }
 
+    /** {@code overCap}: candidates beyond the {@code maxMeshes} nearest. They are never meshed (not even re-meshed), so the horizon is cut there; it is a visible, counted limit. */
     public record Stats(int held, int candidates, int ready, int hiddenByVanilla, int hiddenByFiner, int tooFar, int drawn,
-                        long triangles, int pending, long built, long failures) { }
+                        long triangles, int pending, long built, long failures, int overCap) { }
 
     /** Skirts hang to this absolute height (overworld build floor). Dimensions with a lower floor would show a thin gap only below it. */
     public static final double SKIRT_FLOOR_Y = -64;
@@ -71,7 +72,7 @@ public final class ClientHorizonView implements AutoCloseable {
     private final ConcurrentHashMap<TileKey, Long> failedAt = new ConcurrentHashMap<>();   // key -> revision that could not be decoded
     private final Set<TileKey> inFlight = ConcurrentHashMap.newKeySet();
     private final AtomicLong builtCount = new AtomicLong(), failureCount = new AtomicLong();
-    private volatile Stats stats = new Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    private volatile Stats stats = new Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     // last update() parameters, for select(); client thread only
     private List<Box> lastOrder = List.of();
     private double lastCamX, lastCamZ, lastVanilla, lastMaxDistance;
@@ -146,7 +147,11 @@ public final class ClientHorizonView implements AutoCloseable {
         List<Box> order = new ArrayList<>(cand.values());
         order.sort(Comparator.comparingDouble(b -> b.dist));
         lastOrder = order; lastCamX = camX; lastCamZ = camZ; lastVanilla = vanillaRadius; lastMaxDistance = maxDistance;
-        for (Box b : order) {
+        // Only the nearest maxMeshes candidates may hold a mesh. Scheduling the rest would be undone by step 2 (it evicts the farthest)
+        // and redone by the next update, forever: an endless rebuild loop that never draws those tiles (reproduced: 30 candidates, cap 10).
+        int budget = Math.min(order.size(), maxMeshes);
+        for (int i = 0; i < budget; i++) {
+            Box b = order.get(i);
             if (inFlight.size() >= maxInFlight) break;
             TileKey k = b.key;
             if (inFlight.contains(k)) continue;
@@ -180,7 +185,7 @@ public final class ClientHorizonView implements AutoCloseable {
             out.add(new Drawable(b.key, m.revision(), m.mesh()));
             tris += m.mesh().triangleCount();
         }
-        stats = new Stats(held.size(), cand.size(), ready, vanilla, hiddenFiner, far, out.size(), tris, inFlight.size(), builtCount.get(), failureCount.get());
+        stats = new Stats(held.size(), cand.size(), ready, vanilla, hiddenFiner, far, out.size(), tris, inFlight.size(), builtCount.get(), failureCount.get(), Math.max(0, order.size() - maxMeshes));
         return out;                                  // already nearest first (order is sorted and filtered in place)
     }
 

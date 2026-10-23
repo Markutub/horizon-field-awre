@@ -171,4 +171,38 @@ class ClientHorizonViewTest {
             assertEquals(key(0, 10, 0), d.get(0).key(), "nearest first");
         }
     }
+
+    // ---- G2 audit (2026-10-22): candidates above the mesh cap used to be rebuilt on EVERY update, forever (30 candidates, cap 10 -> +20 builds per update) ----
+
+    @Test void candidatesAboveTheMeshCapAreNotRebuiltInAnEndlessLoop() {
+        Fake f = new Fake();
+        for (int i = 0; i < 30; i++) f.put(0, 20 + i, 0, 1, 64);          // 30 candidate tiles east of the camera, all outside vanilla
+        try (ClientHorizonView v = new ClientHorizonView(f, 10, 1000, Runnable::run)) {
+            List<ClientHorizonView.Drawable> d = null;
+            for (int u = 0; u < 12; u++) d = v.update(0, 0, 0, 100_000, null);
+            ClientHorizonView.Stats s = v.stats();
+            assertEquals(30, s.candidates());
+            assertEquals(10, s.built(), "each of the nearest 10 is meshed exactly once; nothing is rebuilt");
+            assertEquals(10, s.ready());
+            assertEquals(20, s.overCap(), "the limit is visible, not silent");
+            Set<TileKey> nearest = new HashSet<>();
+            for (int i = 0; i < 10; i++) nearest.add(key(0, 20 + i, 0));
+            assertEquals(nearest, keys(d), "the cap keeps the NEAREST tiles");
+        }
+    }
+
+    @Test void theMeshCapFollowsTheCameraAndSettlesAgain() {
+        Fake f = new Fake();
+        for (int i = 0; i < 30; i++) f.put(0, 20 + i, 0, 1, 64);          // x = 320 .. 800
+        try (ClientHorizonView v = new ClientHorizonView(f, 10, 1000, Runnable::run)) {
+            for (int u = 0; u < 5; u++) v.update(0, 0, 0, 100_000, null);
+            assertEquals(10, v.stats().built());
+            List<ClientHorizonView.Drawable> d = null;
+            for (int u = 0; u < 8; u++) d = v.update(800, 0, 0, 100_000, null);     // camera now beside the far end
+            assertEquals(20, v.stats().built(), "10 new nearest tiles meshed once each, then no further rebuilds");
+            Set<TileKey> nearest = new HashSet<>();
+            for (int i = 20; i < 30; i++) nearest.add(key(0, 20 + i, 0));
+            assertEquals(nearest, keys(d));
+        }
+    }
 }

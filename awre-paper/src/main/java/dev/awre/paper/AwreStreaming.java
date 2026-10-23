@@ -159,7 +159,7 @@ final class AwreStreaming {
         plugin.getLogger().info("[AWRE] stream attached: " + p.getName() + " radius=" + (int) c.streamRadius() + " source=" + (c.streamCaptured() ? "captured" : "synthetic"));
     }
 
-    void detach(UUID id) { entries.remove(id); }
+    boolean detach(UUID id) { return entries.remove(id) != null; }
 
     PlayerStreamer.Stats stats(UUID id) { Entry e = entries.get(id); return e == null ? null : e.streamer.stats(); }
 

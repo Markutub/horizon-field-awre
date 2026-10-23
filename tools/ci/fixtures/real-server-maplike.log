@@ -1,0 +1,9 @@
+[05:49:17 INFO]: Found new data pack paper, loading it automatically
+[05:49:17 INFO]: No existing world data, creating new world
+[05:49:17 ERROR]: No key layers in MapLike[{}]
+[05:49:18 INFO]: Loaded 1470 recipes
+[05:49:18 INFO]: Loaded 1584 advancements
+[05:49:18 INFO]: [ca.spottedleaf.dataconverter.minecraft.datatypes.MCTypeRegistry] Initialising converters for DataConverter...
+[05:49:21 ERROR]: No key layers in MapLike[{}]
+[05:49:21 INFO]: Selecting spawn point for world 'minecraft:the_nether'...
+[05:49:22 ERROR]: No key layers in MapLike[{}]

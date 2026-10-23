@@ -1,0 +1,4 @@
+[05:50:15] [Download-2/ERROR]: Failed to fetch user properties
+[05:50:16] [Render thread/ERROR]: Error while loading the narrator
+[05:50:16] [Download-1/ERROR]: Failed to fetch Realms feature flags
+[05:50:19] [Render thread/ERROR]: Error starting SoundSystem. Turning off sounds & music

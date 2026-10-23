@@ -1,0 +1,3 @@
+[05:50:44] [Render thread/INFO]: [AWRE] store tiles=2127 accepted=2129 dropped=1 palette_entries=5 strikes=0
+[05:50:49] [Render thread/INFO]: [AWRE] horizon view: held=2127 candidates=1626 ready=852 drawn=852 hidden_vanilla=501 hidden_finer=0 too_far=0 tris=266234 pending=0 failures=0
+[05:50:49] [Render thread/INFO]: [AWRE] render: received=2127 mesh_built=852 mesh_failed=0 gpu_uploaded=848 upload_failed=0 gpu_freed=0 gpu_resident=848 gpu_bytes=11671000 planned_draws=848 planned_tris=265250 submitted_draws=1049874 submitted_frames=2429

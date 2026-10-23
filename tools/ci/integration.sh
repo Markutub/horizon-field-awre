@@ -13,6 +13,9 @@ MC=${MC_VERSION:-1.21.11}
 HMC=${HMC:-headlessmc}
 RENDER_SMOKE=${RENDER_SMOKE:-0}
 GATE="$(dirname "$(realpath "$0")")/render-gate.sh"
+SCAN="$(dirname "$(realpath "$0")")/log-scan.sh"
+CLIENT_RD=${CLIENT_RENDER_DISTANCE:-4}              # explicit client render distance (server view-distance is 4): the vanilla square is part of the scenario
+ASSERT_EFFECTIVE_RADIUS=${ASSERT_EFFECTIVE_RADIUS:-0}   # 1 = fail when the client hides tiles outside what the server sends (needs the adapter fix; use CLIENT_RENDER_DISTANCE=12)
 OUT=${OUT:-$PWD/ci-out}
 mkdir -p "$OUT"
 H() { "$HMC" -Dhmc.jline.enabled=false "$@"; }
@@ -24,6 +27,11 @@ check() { # check <description> <file> <extended-regex>
   if grep -Eq "$3" "$2" 2>/dev/null; then pass "$1"; else fail "$1   (pattern: $3 in $(basename "$2"))"; fi
 }
 die() { echo "FATAL: $*"; echo "- **FATAL**: $*" >> "$OUT/summary.md"; H debug > "$OUT/hmc-debug.txt" 2>&1 || true; exit 1; }
+scan() { # scan <description> <log-scan args...>: pass/fail from log-scan.sh, with its message in the summary on failure
+  local d=$1; shift; local o; o=$(bash "$SCAN" "$@" 2>&1); local rc=$?
+  if [ "$rc" -eq 0 ]; then pass "$d"; else echo "$o"; fail "$d: $(head -1 <<<"$o")"; fi
+}
+noise() { { echo "== $(basename "$1")"; bash "$SCAN" classify "$1"; } >> "$OUT/noise-report.txt" 2>&1; }
 wait_for() { # wait_for <file> <regex> <seconds>
   local t=0; while [ $t -lt "$3" ]; do grep -Eq "$2" "$1" 2>/dev/null && return 0; sleep 5; t=$((t+5)); done; return 1
 }
@@ -33,6 +41,10 @@ trap cleanup EXIT
 
 ls "$JARS"/AWRE-Paper-*.jar "$JARS"/awre-fabric-*.jar >/dev/null || die "jars missing in $JARS"
 H debug > "$OUT/hmc-debug-start.txt" 2>&1 || true
+{ echo "commit: ${GITHUB_SHA:-$(git -C "$(dirname "$GATE")/../.." rev-parse HEAD 2>/dev/null || echo unknown)}"; echo "minecraft: $MC"; echo "java: $(java -version 2>&1 | head -1)"
+  echo "client_render_distance: $CLIENT_RD  (server view-distance=4, simulation-distance=4, level-type=flat, offline)"; echo "render_smoke: $RENDER_SMOKE"
+  (cd "$JARS" && sha256sum AWRE-Paper-*.jar awre-fabric-*.jar); } > "$OUT/run-metadata.txt" 2>&1
+: > "$OUT/noise-report.txt"
 
 # ---------------------------------------------------------------- server
 echo "== Paper $MC server"
@@ -80,7 +92,7 @@ FAPI=$(find "$HOME" -maxdepth 8 -name 'fabric-api-*.jar' -not -path '*/.gradle/*
 MODS_DIR=$(dirname "$FAPI"); echo "mods dir: $MODS_DIR"
 cp "$JARS"/awre-fabric-*.jar "$MODS_DIR/"
 ls -la "$MODS_DIR" > "$OUT/mods-dir.txt"
-printf 'pauseOnLostFocus:false\nonboardAccessibility:false\nnarrator:0\n' > "$MODS_DIR/../options.txt"
+printf 'pauseOnLostFocus:false\nonboardAccessibility:false\nnarrator:0\nrenderDistance:%s\n' "$CLIENT_RD" > "$MODS_DIR/../options.txt"
 
 run_client() { # run_client <name> <extra jvm args>
   H launch --offline --headless --server localhost:25565 --jvm "-Xmx2G $2" fabric "$MC" > "$OUT/$1.log" 2>&1 &
@@ -119,6 +131,11 @@ check "G1 client strikes stayed 0"                    "$OUT/clientA.log" 'store 
 wait_for "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*' 120 || echo "client A: no meshed tiles seen within timeout"
 check "G2 client built meshes from streamed tiles"    "$OUT/clientA.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*'
 check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizon view: .* failures=0'
+# convergence: every candidate within the mesh budget must have a mesh (ready>=1 only proves one tile). Polls the LAST view line up to 240 s.
+t=0; while [ $t -lt 240 ]; do bash "$SCAN" converged "$OUT/clientA.log" >/dev/null 2>&1 && break; sleep 5; t=$((t+5)); done
+scan "G2 client A meshed ALL expected tiles (ready+over_cap=candidates, pending=0, held accounted)" converged "$OUT/clientA.log"
+check "G2 client reports its vanilla radius = renderDistance*16" "$OUT/clientA.log" "horizon view: .* vanilla_radius=$((CLIENT_RD*16))( |\$)"
+if [ "$ASSERT_EFFECTIVE_RADIUS" = "1" ]; then check "G2 vanilla radius not larger than the server sends (view-distance 4 -> 64)" "$OUT/clientA.log" 'horizon view: .* vanilla_radius=([0-9]|[1-5][0-9]|6[0-4])( |$)'; fi
 # PHASE_01 render stages: informational only (a headless CI client may never reach the world-render event). Read these lines first
 # when diagnosing: received -> mesh_built -> gpu_uploaded -> submitted_draws. Only submitted_draws>0 means the renderer issued draws.
 if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
@@ -134,21 +151,19 @@ if [ "$RENDER_SMOKE" = "1" ]; then
   if [ "$GATE_RC" -eq 0 ]; then pass "G3 render smoke: mesh built, GPU uploaded, draws submitted, no AWRE renderer exception"
   else fail "G3 render smoke: ${GATE_OUT#RENDER-GATE FAIL: }"; fi
 fi
-if grep -Eq 'Exception|Caused by' "$OUT/clientA.log"; then
-  if grep -En 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" > /dev/null; then
-    echo "---- AWRE exception lines in clientA.log (first match with 12 lines of stack/context) ----"
-    grep -En -m3 -A12 'AWRE.*(Exception|rejected)' "$OUT/clientA.log" | head -60
-    echo "----"
-    fail "AWRE-related exception/rejection in client log"
-  else pass "no AWRE exceptions in client log (unrelated exceptions may exist)"; fi
-else pass "no exceptions in client log"; fi
-stop_client
+scan "no AWRE-attributable exception in client A log (stack-aware)" awre-exceptions client "$OUT/clientA.log"
+noise "$OUT/clientA.log"
+stop_client       # SIGTERM from this harness: the client's "failed with code 143" is EXPECTED. Its own disconnect/shutdown path is not exercised; the server side is checked below.
+wait_for "$OUT/server.log" 'quit: session dropped, stream detached' 30 || true
+check "G0.5 server cleaned up the AWRE session and stream when client A left" "$OUT/server.log" 'quit: session dropped, stream detached'
 
 echo "== client B: incompatible client (G0.4)"
 run_client clientB "-Dawre.test.minVersion=2 -Dawre.test.maxVersion=3"
 wait_for "$OUT/clientB.log" 'incompatible server' 420 || echo "client B: marker not seen within timeout"
 check "G0.4 client reports incompatible and continues" "$OUT/clientB.log" 'incompatible server, continuing as a normal vanilla-style client'
 check "G0.4 server rejects with INCOMPATIBLE_VERSION"  "$OUT/server.log"  'REJECTED.*INCOMPATIBLE_VERSION'
+scan "no AWRE-attributable exception in client B log" awre-exceptions client "$OUT/clientB.log"
+noise "$OUT/clientB.log"
 stop_client
 
 # ---------------------------------------------------------------- opt-in compat clients (informational)
@@ -208,7 +223,8 @@ fi
 pkill -TERM -f "$SERVER_DIR" 2>/dev/null
 wait_for "$OUT/server.log" 'AWRE disabled' 90 || echo "server did not log plugin disable within 90 s"
 kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
-if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server.log"; then fail "AWRE-related exception in server log"; else pass "no AWRE exceptions in server log"; fi
+scan "no AWRE-attributable exception in server log (stack-aware)" awre-exceptions server "$OUT/server.log"
+noise "$OUT/server.log"
 check "server stopped cleanly (plugin disabled)" "$OUT/server.log" 'AWRE disabled'
 
 # ---------------------------------------------------------------- phase 2: captured (real chunks) + persistence
@@ -241,9 +257,16 @@ check "G1c client received a palette from real blocks" "$OUT/clientC.log" 'palet
 check "G1c unobserved areas send nothing (noData>0)" "$OUT/server2.log" 'stream [^:]+: .*noData=[1-9]'
 check "G1c no tile failures reported by the server"  "$OUT/server2.log" 'stream [^:]+: .*failures=0'
 check "G1c client strikes stayed 0"                  "$OUT/clientC.log" 'store tiles=[0-9]+ .*strikes=0'
+scan "no AWRE-attributable exception in client C log" awre-exceptions client "$OUT/clientC.log"
+# Real captured terrain reaching the mesher: INFORMATIONAL until a green baseline exists (before G2 these tiles were all inside the vanilla square: candidates=0).
+if bash "$SCAN" converged "$OUT/clientC.log" > "$OUT/clientC-converged.txt" 2>&1; then pass "G2 (info) captured terrain meshed to convergence on client C"; else echo "INFO: client C: $(head -1 "$OUT/clientC-converged.txt")"; fi
+noise "$OUT/clientC.log"
 stop_client
+wait_for "$OUT/server2.log" 'quit: session dropped, stream detached' 30 || true
+check "G0.5 server cleaned up the session and stream when client C left" "$OUT/server2.log" 'quit: session dropped, stream detached'
 stop_server "$OUT/server2.log"
-if grep -Eq 'AWRE.*(Exception|SEVERE)|Could not pass event' "$OUT/server2.log"; then fail "AWRE-related exception in server2 log"; else pass "no AWRE exceptions in server2 log"; fi
+scan "no AWRE-attributable exception in server2 log (stack-aware)" awre-exceptions server "$OUT/server2.log"
+noise "$OUT/server2.log"
 # one .hfl per world (overworld/nether/end); the nether and end files hold only a header, so check the largest one
 TERRAIN_FILE=$(find "$SERVER_DIR/plugins/AWRE/terrain" -name '*.hfl' -printf '%s %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 ls -la "$SERVER_DIR/plugins/AWRE/terrain" > "$OUT/terrain-dir.txt" 2>&1
@@ -254,7 +277,10 @@ start_server "$OUT/server3.log"
 wait_for "$OUT/server3.log" "terrain cache for '.*': restored" 120 || echo "server3: cache line not seen (it appears when the first chunk or player touches the world)"
 check "G1c restart restores chunks from disk"        "$OUT/server3.log" "terrain cache for '.*': restored [1-9][0-9]* chunks"
 stop_server "$OUT/server3.log"
+scan "no AWRE-attributable exception in server3 log (stack-aware)" awre-exceptions server "$OUT/server3.log"
+noise "$OUT/server3.log"
 
 H debug > "$OUT/hmc-debug-end.txt" 2>&1 || true
+echo; echo "---- environmental noise (labelled, not suppressed): $OUT/noise-report.txt ----"; grep -A3 -h UNCLASSIFIED "$OUT/noise-report.txt" 2>/dev/null | head -20
 echo; cat "$OUT/summary.md"
 [ "$FAILS" -eq 0 ] || { echo "$FAILS check(s) failed"; exit 1; }

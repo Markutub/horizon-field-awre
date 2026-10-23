@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <bytecodeTargetLevel target="25" />
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="horizon-field.awre-paper" options="-Xlint:all" />
+      <module name="horizon-field.awre-paper.main" options="-Xlint:all" />
+      <module name="horizon-field.awre-paper.test" options="-Xlint:all" />
+      <module name="horizon-field.awre-protocol" options="-Xlint:all" />
+      <module name="horizon-field.awre-protocol.main" options="-Xlint:all" />
+      <module name="horizon-field.awre-protocol.test" options="-Xlint:all" />
+      <module name="horizon-field.awre-stream" options="-Xlint:all" />
+      <module name="horizon-field.awre-stream.main" options="-Xlint:all" />
+      <module name="horizon-field.awre-stream.test" options="-Xlint:all" />
+      <module name="horizon-field.horizon-core" options="-Xlint:all" />
+      <module name="horizon-field.horizon-core.main" options="-Xlint:all" />
+      <module name="horizon-field.horizon-core.test" options="-Xlint:all" />
+      <module name="horizon-field.horizon-paper" options="-Xlint:all" />
+      <module name="horizon-field.horizon-paper.main" options="-Xlint:all" />
+      <module name="horizon-field.horizon-paper.test" options="-Xlint:all" />
+    </option>
+  </component>
+</project>
