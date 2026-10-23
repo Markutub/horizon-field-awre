@@ -16,7 +16,7 @@ stream:
   synthetic-chunk-radius: 0       # 0..99 (99 = 39 601 chunks, about 50 MB)
   radius: 1000                    # blocks, 256..8000
   bytes-per-second: 250000        # per player, ASSUMED budget
-  max-held-tiles: 4096            # must not exceed the client cache (8192)
+  max-held-tiles: 4096            # 64..4096: a client meshes and keeps at most 4096 tiles resident (more would be held but never drawn)
   compact-garbage-ratio: 0.5      # 0.1..0.95: rewrite a world's cache file when this share of its tile records is superseded (checked every 30 s)
   compact-min-bytes: 1048576      # ...and the file is at least this big (0 = size does not matter)
   revalidate-seconds: 600         # 0..86400, captured mode: re-observe every loaded chunk this often (0 = only on load and on block events). Catches WorldEdit, fluids, other plugins. Main-thread cost: one ChunkSnapshot per chunk at <= 2 per tick within a 0.5 ms budget (NOT yet measured on a real server)

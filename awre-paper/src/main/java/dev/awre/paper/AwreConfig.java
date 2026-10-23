@@ -42,7 +42,7 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         double bps = c.getDouble("stream.bytes-per-second", 250_000);
         if (bps < 10_000 || bps > 50_000_000) { log.warning("[AWRE] stream.bytes-per-second out of range; using 250000"); bps = 250_000; }
         int held = c.getInt("stream.max-held-tiles", 4096);
-        if (held < 64 || held > 8192) { log.warning("[AWRE] stream.max-held-tiles must be 64..8192 (client cache is 8192); using 4096"); held = 4096; }
+        if (held < 64 || held > dev.awre.stream.StreamConfig.CLIENT_MESH_CAP) { log.warning("[AWRE] stream.max-held-tiles must be 64.." + dev.awre.stream.StreamConfig.CLIENT_MESH_CAP + " (the client meshes at most that many tiles); using 4096"); held = 4096; }
         double ratio = c.getDouble("stream.compact-garbage-ratio", 0.5);
         if (ratio < 0.1 || ratio > 0.95) { log.warning("[AWRE] stream.compact-garbage-ratio must be 0.1..0.95; using 0.5"); ratio = 0.5; }
         long minBytes = c.getLong("stream.compact-min-bytes", 1_048_576L);

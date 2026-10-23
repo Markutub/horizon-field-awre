@@ -14,6 +14,10 @@ on:
         description: "Make render counters mandatory in the integration job (opt-in; default CI stays informational)"
         type: boolean
         default: false
+      client_render_distance:
+        description: "Client renderDistance for the integration job (default 12 = Minecraft default; server view-distance is 4)"
+        type: string
+        default: ""
       compat_mods:
         description: "Opt-in compat clients, one per group, e.g. 'sodium sodium+iris bobby vulkanmod' ('+' joins mods that load together). Informational: results go to the summary, a failure does not fail the job"
         type: string
@@ -133,6 +137,7 @@ jobs:
       - name: Run integration (see tools/ci/integration.sh for the exact checks)
         env:
           RENDER_SMOKE: ${{ inputs.render_smoke && '1' || '0' }}   # opt-in via workflow_dispatch; render counters are mandatory only when 1
+          CLIENT_RENDER_DISTANCE: ${{ inputs.client_render_distance }}      # empty = harness default (12)
           COMPAT_MODS: ${{ inputs.compat_mods }}                   # opt-in via workflow_dispatch; empty = no compat clients
         run: bash tools/ci/integration.sh jars
       - name: Summary

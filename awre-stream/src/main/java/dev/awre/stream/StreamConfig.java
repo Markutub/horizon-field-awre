@@ -7,6 +7,13 @@ package dev.awre.stream;
 public record StreamConfig(double radius, double bytesPerSecond, long burstBytes, double rttSeconds, int maxHeldTiles,
                            double replanBlocks, int maxDropPerTick, int retryLimit) {
 
+    /**
+     * Most tiles a client meshes AND keeps resident on the GPU (ClientRuntime view cap = MeshResidency.Limits.defaults().maxResident()).
+     * A server must not hold more tiles per player than this: candidates beyond it are never meshed and the horizon is cut there
+     * (G2 audit: the server accepted up to 8192 while the client stopped at 4096). The client tile CACHE (8192) is larger on purpose.
+     */
+    public static final int CLIENT_MESH_CAP = 4096;
+
     public static StreamConfig defaults() { return new StreamConfig(2000, 250_000, 65_536, 0.1, 4096, 16, 256, 3); }
 
     public StreamConfig {

@@ -61,7 +61,7 @@ public final class ClientRuntime<H> {
         session = new ClientSession(limits, counters, modVersion, protocolMin, protocolMax);
         session.setPayloadValidator(TerrainPayloads.ANY);   // G0/G1 test tiles or terrain tiles
         if (renderEnabled) {
-            view = new ClientHorizonView(session, 4096);   // meshes are built on a background thread
+            view = new ClientHorizonView(session, StreamConfig.CLIENT_MESH_CAP);   // meshes are built on a background thread
             planner = new HorizonDrawPlanner<>(view, new MeshResidency<>(backend, MeshResidency.Limits.defaults(), freeDelayFrames));
         }
         lastLevel = null; sinceJoin = 0; lastLogged = ClientSession.State.IDLE; lastTileLogged = null;

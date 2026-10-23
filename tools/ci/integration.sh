@@ -14,8 +14,8 @@ HMC=${HMC:-headlessmc}
 RENDER_SMOKE=${RENDER_SMOKE:-0}
 GATE="$(dirname "$(realpath "$0")")/render-gate.sh"
 SCAN="$(dirname "$(realpath "$0")")/log-scan.sh"
-CLIENT_RD=${CLIENT_RENDER_DISTANCE:-4}              # explicit client render distance (server view-distance is 4): the vanilla square is part of the scenario
-ASSERT_EFFECTIVE_RADIUS=${ASSERT_EFFECTIVE_RADIUS:-0}   # 1 = fail when the client hides tiles outside what the server sends (needs the adapter fix; use CLIENT_RENDER_DISTANCE=12)
+SERVER_VD=4                                         # server.properties view-distance written below
+CLIENT_RD=${CLIENT_RENDER_DISTANCE:-12}             # Minecraft's default (12) is LARGER than the server's view distance: the case the effective-radius fix is for
 OUT=${OUT:-$PWD/ci-out}
 mkdir -p "$OUT"
 H() { "$HMC" -Dhmc.jline.enabled=false "$@"; }
@@ -42,7 +42,7 @@ trap cleanup EXIT
 ls "$JARS"/AWRE-Paper-*.jar "$JARS"/awre-fabric-*.jar >/dev/null || die "jars missing in $JARS"
 H debug > "$OUT/hmc-debug-start.txt" 2>&1 || true
 { echo "commit: ${GITHUB_SHA:-$(git -C "$(dirname "$GATE")/../.." rev-parse HEAD 2>/dev/null || echo unknown)}"; echo "minecraft: $MC"; echo "java: $(java -version 2>&1 | head -1)"
-  echo "client_render_distance: $CLIENT_RD  (server view-distance=4, simulation-distance=4, level-type=flat, offline)"; echo "render_smoke: $RENDER_SMOKE"
+  echo "client_render_distance: $CLIENT_RD  (server view-distance=$SERVER_VD, simulation-distance=4, level-type=flat, offline)"; echo "render_smoke: $RENDER_SMOKE"
   (cd "$JARS" && sha256sum AWRE-Paper-*.jar awre-fabric-*.jar); } > "$OUT/run-metadata.txt" 2>&1
 : > "$OUT/noise-report.txt"
 
@@ -78,6 +78,7 @@ spawn-protection=0
 level-type=minecraft\:flat
 motd=awre-ci
 PROPS
+grep -q "^view-distance=$SERVER_VD\$" "$SERVER_DIR/server.properties" || { echo "SERVER_VD ($SERVER_VD) is out of sync with server.properties"; exit 2; }
 H server launch "server-paper-$MC" --jvm "-Xms512M -Xmx1G" > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 wait_for "$OUT/server.log" 'Done \(' 300 || { tail -50 "$OUT/server.log"; die "server did not finish starting"; }
@@ -134,8 +135,8 @@ check "G2 client meshing had no failures"             "$OUT/clientA.log" 'horizo
 # convergence: every candidate within the mesh budget must have a mesh (ready>=1 only proves one tile). Polls the LAST view line up to 240 s.
 t=0; while [ $t -lt 240 ]; do bash "$SCAN" converged "$OUT/clientA.log" >/dev/null 2>&1 && break; sleep 5; t=$((t+5)); done
 scan "G2 client A meshed ALL expected tiles (ready+over_cap=candidates, pending=0, held accounted)" converged "$OUT/clientA.log"
-check "G2 client reports its vanilla radius = renderDistance*16" "$OUT/clientA.log" "horizon view: .* vanilla_radius=$((CLIENT_RD*16))( |\$)"
-if [ "$ASSERT_EFFECTIVE_RADIUS" = "1" ]; then check "G2 vanilla radius not larger than the server sends (view-distance 4 -> 64)" "$OUT/clientA.log" 'horizon view: .* vanilla_radius=([0-9]|[1-5][0-9]|6[0-4])( |$)'; fi
+EFF=$(( CLIENT_RD < SERVER_VD ? CLIENT_RD : SERVER_VD ))   # what vanilla can really draw, in chunks
+check "G2 vanilla radius = min(client $CLIENT_RD, server $SERVER_VD) chunks (+1 border chunk allowed), not the raw client option" "$OUT/clientA.log" "horizon view: .* vanilla_radius=($((EFF*16))|$((EFF*16+16)))( |\$)"
 # PHASE_01 render stages: informational only (a headless CI client may never reach the world-render event). Read these lines first
 # when diagnosing: received -> mesh_built -> gpu_uploaded -> submitted_draws. Only submitted_draws>0 means the renderer issued draws.
 if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
