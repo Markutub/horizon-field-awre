@@ -151,6 +151,59 @@ check "G0.4 client reports incompatible and continues" "$OUT/clientB.log" 'incom
 check "G0.4 server rejects with INCOMPATIBLE_VERSION"  "$OUT/server.log"  'REJECTED.*INCOMPATIBLE_VERSION'
 stop_client
 
+# ---------------------------------------------------------------- opt-in compat clients (informational)
+# COMPAT_MODS="sodium sodium+iris bobby vulkanmod": one client per group with those Modrinth mods added next to AWRE; same synthetic server.
+# Discovery, not a gate: a failure is written to the summary as "COMPAT FAIL" and only fails the job when COMPAT_STRICT=1.
+COMPAT_MODS=${COMPAT_MODS:-}
+COMPAT_STRICT=${COMPAT_STRICT:-0}
+if [ -n "${COMPAT_MODS// /}" ]; then
+  . "$(dirname "$(realpath "$0")")/compat-lib.sh"
+  echo "== compat clients: $COMPAT_MODS"
+  { echo; echo "### Compat clients (informational)"; } >> "$OUT/summary.md"
+  cpass() { echo "PASS  [$1] $2"; echo "- COMPAT PASS [$1]: $2" >> "$OUT/summary.md"; }
+  cfail() { echo "FAIL  [$1] $2"; echo "- COMPAT FAIL [$1]: $2" >> "$OUT/summary.md"; [ "$COMPAT_STRICT" = 1 ] && FAILS=$((FAILS+1)); }
+  cnote() { echo "NOTE  [$1] $2"; echo "- COMPAT NOTE [$1]: $2" >> "$OUT/summary.md"; }
+  cchk() { # cchk <group> <description> <file> <regex>
+    if grep -Eq "$4" "$3" 2>/dev/null; then cpass "$1" "$2"; else cfail "$1" "$2   (pattern: $4)"; fi
+  }
+  for grp in $(compat_groups "$COMPAT_MODS"); do
+    cl="compat_$(compat_name "$grp")"
+    before=$(ls "$MODS_DIR" | sort)
+    bad=""
+    for slug in $(compat_slugs "$grp"); do
+      compat_slug_ok "$slug" || { bad="invalid slug '$slug'"; break; }
+      H mod add mod "$slug" fabric "$MC" > "$OUT/$cl-modadd-$slug.log" 2>&1 || { bad="'$slug' could not be added for $MC (see $cl-modadd-$slug.log)"; break; }
+    done
+    added=$(comm -13 <(echo "$before") <(ls "$MODS_DIR" | sort))
+    [ -n "$bad" ] || [ -n "$added" ] || bad="no jar appeared in the mods dir"
+    echo "$added" > "$OUT/$cl-added-jars.txt"
+    if [ -n "$bad" ]; then
+      cnote "$grp" "SKIPPED: $bad"
+      for f in $added; do rm -f "$MODS_DIR/$f"; done
+      continue
+    fi
+    cnote "$grp" "added jars: $(echo $added)"
+    run_client "$cl" ""
+    wait_for "$OUT/$cl.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9]' 360 || echo "[$grp] no meshed tiles within timeout"
+    sleep 20      # let the render counters accumulate
+    L="$OUT/$cl.log"
+    cchk "$grp" "client did not crash on startup"     "$L" 'handshake OK|horizon view:|\[AWRE\] client G0 loaded'
+    if grep -Eq 'Crash report saved|Game crashed|The game crashed' "$L" 2>/dev/null; then cfail "$grp" "the game crashed (see $cl.log)"; fi
+    cchk "$grp" "AWRE handshake OK"                  "$L" '\[AWRE\] handshake OK: protocol v1'
+    for slug in $(compat_slugs "$grp"); do
+      compat_is_target "$slug" && cchk "$grp" "AWRE detected $slug (RenderPolicy note)" "$L" "compat target loaded: $slug"
+    done
+    cchk "$grp" "G2 meshes built from streamed tiles" "$L" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*'
+    if G=$(bash "$GATE" "$L" 2>&1); then cpass "$grp" "render gate: $G"; else cfail "$grp" "render gate: $G"; fi
+    if grep -En 'AWRE.*(Exception|rejected)' "$L" > /dev/null 2>&1; then
+      cfail "$grp" "AWRE-related exception in log"; grep -En -m2 -A8 'AWRE.*(Exception|rejected)' "$L" | head -24
+    fi
+    grep -E '\[AWRE\] (shader pack|compat target|LOD mod)' "$L" | sort -u | head -5 || true
+    stop_client
+    for f in $added; do rm -f "$MODS_DIR/$f"; done      # restore the baseline mods dir for the next group
+  done
+fi
+
 # ---------------------------------------------------------------- shutdown + exceptions
 pkill -TERM -f "$SERVER_DIR" 2>/dev/null
 wait_for "$OUT/server.log" 'AWRE disabled' 90 || echo "server did not log plugin disable within 90 s"

@@ -45,3 +45,7 @@ The separate legacy path (`horizon-paper`) captures loaded chunks into `ColumnTi
 ## 2026-10-22 (Session 27) update
 
 Supersedes the stale parts of the header above ("Gradle/Fabric/CI/in-game NOT run", "`awre-fabric` explicitly draws nothing"): supplied CI logs show the Fabric client meshing, uploading and submitting draws headlessly. Still unverified: fresh builds of this exact snapshot, visible pixels, production-scale server cost. Pure-Java: core 98 / protocol 67 / stream 58. See `docs/STATUS.md` (levels table), `docs/MANUAL_RENDER_TEST.md`, `docs/MEASUREMENT_PLAN.md`. Render smoke is opt-in (`RENDER_SMOKE=1` / workflow input); default CI remains non-flaky.
+
+## 2026-10-23 (Session 32) update
+
+Added opt-in compat CI (`compat_mods` input -> `integration.sh` compat clients, `tools/ci/compat-lib.sh`) and a diagnostic `tools/ci/api-dump.sh` (artifact `mc-api-dump`) so far-plane/Vulkan API questions are answered from the real jar. Both tested only against mocks in the sandbox; first real CI run pending. See `docs/STATUS.md` (Session 32) and `docs/COMPAT_PLAN.md` (1.1, 3.1).

@@ -54,3 +54,8 @@ Deferred GPU free (`MeshResidency` freeDelayFrames=3, unit-tested with a fake GP
 | Dimensions with build floor below -64 | Client skirt floor is a constant (`SKIRT_FLOOR_Y = -64`) | KNOWN LIMITATION |
 | ItemsAdder / custom blocks | Chunk data shows carrier blocks (e.g. note blocks), so distant colours would be wrong | NOT TESTED; needs a colour-override list |
 | Resource/data pack | AWRE ships none (avoids `pack_format` drift); keep it that way | N/A |
+
+
+## How to fill this table (CI)
+
+Run the `ci` workflow manually (workflow_dispatch) with `compat_mods` set, e.g. `sodium sodium+iris bobby vulkanmod`; read "Compat clients" in the job summary and `ci-out/compat_<group>.log`. A PASS means: the client started, AWRE negotiated, meshed, uploaded and issued draws beside that mod. It does NOT mean the terrain is visible or shaded correctly. Copy the result here with the date and run id; only then change NOT TESTED. Also download the `mc-api-dump` artifact from the `build` job: it is the source of truth for the projection/far-plane and Vulkan questions.

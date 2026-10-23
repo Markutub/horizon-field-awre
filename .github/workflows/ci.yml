@@ -14,6 +14,10 @@ on:
         description: "Make render counters mandatory in the integration job (opt-in; default CI stays informational)"
         type: boolean
         default: false
+      compat_mods:
+        description: "Opt-in compat clients, one per group, e.g. 'sodium sodium+iris bobby vulkanmod' ('+' joins mods that load together). Informational: results go to the summary, a failure does not fail the job"
+        type: string
+        default: ""
 
 env:
   MC_VERSION: ${{ inputs.mc_version || '1.21.11' }}
@@ -33,6 +37,7 @@ jobs:
       - run: bash tools/verify-awre.sh
       - run: bash tools/verify-stream.sh
       - run: bash tools/ci/render-gate-test.sh
+      - run: bash tools/ci/compat-lib-test.sh
       - name: Reference frames (CPU geometry check of the real LOD plan + meshes; not an in-game render)
         run: bash tools/preview/run-reference-frame.sh reference-frames
       - uses: actions/upload-artifact@v4
@@ -54,6 +59,12 @@ jobs:
         run: gradle build -PjavaRelease=21 --stacktrace
       - name: Fabric build (separate Loom build)
         run: gradle -p awre-fabric build --stacktrace
+      - name: Dump real Minecraft/Fabric API signatures (javap) for the next porting step
+        continue-on-error: true            # diagnostic only: never fails the build
+        run: bash tools/ci/api-dump.sh mc-api-dump
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: mc-api-dump, path: mc-api-dump/, if-no-files-found: warn }
       - name: Collect jars
         run: |
           mkdir -p jars
@@ -121,6 +132,7 @@ jobs:
       - name: Run integration (see tools/ci/integration.sh for the exact checks)
         env:
           RENDER_SMOKE: ${{ inputs.render_smoke && '1' || '0' }}   # opt-in via workflow_dispatch; render counters are mandatory only when 1
+          COMPAT_MODS: ${{ inputs.compat_mods }}                   # opt-in via workflow_dispatch; empty = no compat clients
         run: bash tools/ci/integration.sh jars
       - name: Summary
         if: always()

@@ -1,5 +1,17 @@
 # Project Status
 
+## Session 32 (compat + API discovery; sandbox, nothing run in CI yet)
+
+Starting point: snapshot `horizon-field-awre-g1.zip` (HEAD `e2f2b6e`), which already contains the session 22-25 patches (dimension fix, deferred free, `ClientRuntime`, `RenderPolicy`, `BiomeTint`, uniform write order). Pure-Java re-run on this snapshot: core 98, protocol 67, stream 64, all 0 failures.
+
+Added (opt-in or diagnostic only; default CI behaviour unchanged):
+- `tools/ci/api-dump.sh` + `build` job step (`continue-on-error`) + artifact `mc-api-dump`: real `javap` signatures from the remapped Minecraft jar and Fabric's world-render API. Tested offline against a synthetic jar (discovery, javap, no-jar path). Purpose: answer the far-plane/projection and Vulkan questions from the jar (see `docs/COMPAT_PLAN.md` 1.1).
+- `compat_mods` workflow input + compat block in `tools/ci/integration.sh` + `tools/ci/compat-lib.sh` (+ `compat-lib-test.sh`, run in `verify`): one client per mod group (Sodium, Sodium+Iris, Bobby, VulkanMod...). Tested offline with a mock HeadlessMc: success, SKIP and crash paths, mods dir restored, `COMPAT_STRICT` counting.
+- NOT verified: that HeadlessMc's `mod add mod <slug> fabric <mc>` accepts these slugs and drops the jar in the same mods dir as fabric-api (the existing fabric-api step suggests yes); that VulkanMod/Iris/Bobby publish builds for 1.21.11; anything about visible output.
+- Still open and unchanged: far-plane clipping (believed, unverified), human-visible check, server cost measurement, shaded rendering under Iris.
+
+Next, in order: (1) run `ci` with `compat_mods=sodium` and read `mc-api-dump/NOTES.txt`; (2) decide the far-plane option from the dump; (3) widen to `sodium+iris bobby vulkanmod`; (4) `docs/MANUAL_RENDER_TEST.md` baseline by a human.
+
 ## 2026-10-22 (Session 27) evidence addendum (LATEST)
 
 Older sections below are historical (Session 16-26 snapshots) and are kept as written. Current evidence, by verification level:

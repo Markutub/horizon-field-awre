@@ -15,12 +15,19 @@ Goal: AWRE keeps drawing distant terrain with these installed, without rebuildin
 
 G2 (meshes built) and G3 (GPU upload + draw submitted) must pass on plain 1.21.11 in CI first. G2 fix is WRITTEN (dimension id). G3 depends on `HorizonRenderer`'s open `API-ASSUMPTION`s. Also open: the far-plane clipping limitation (terrain past the projection far plane is clipped regardless of mods): needs an AWRE-owned projection matrix with an extended far plane, and a fog blend at the seam with vanilla. **TODO**, applies to every target.
 
+### 1.1 Far plane: what is known, what is not, how it gets decided
+
+- Known (source): `HorizonRenderer` binds the game's own projection through `RenderSystem.bindDefaultUniforms(pass)` and draws in `WorldRenderEvents.END_MAIN`. Nothing in the repo sets a projection or far plane.
+- Believed, NOT verified: vanilla's far plane is a small multiple of the render distance (about 4x), so tiles beyond it are clipped even though they are meshed, uploaded and "submitted". The render counters cannot show this; only a human-visible run (`MANUAL_RENDER_TEST.md` check 2) or the API dump below can.
+- Options once the real API is known (decide from the dump, do not guess): (a) bind an AWRE-owned projection with a larger far plane for the AWRE pass only; (b) draw AWRE before vanilla terrain with its own near/far, so vanilla overwrites it; (c) clamp the planner's `maxDistance` to the real far plane so the GPU is not fed tiles that can never show (cheap, safe, loses nothing already invisible). Depth values from two different projections are not comparable, so (a) needs care about how it depth-tests against vanilla geometry.
+- Enabler (WRITTEN): `tools/ci/api-dump.sh`, run by the `build` job (never fails it), uploads artifact `mc-api-dump`: `javap` of the blaze3d package, projection/fog/camera/render-type classes, the Fabric world-render events, and a list of any Vulkan/backend-named classes in the game jar. Read `NOTES.txt` first.
+
 ## 2. Targets
 
 ### 2.1 Sodium (client)
 - Design: AWRE draws its own pass from a Fabric API world-render event, independent of Sodium's chunk renderer. Expected to work.
 - Risks: event timing relative to Sodium's passes; depth buffer state. UNKNOWN until run.
-- Work: add `sodium` + Fabric API to the CI mods dir (second client run, "client C"); expect G3 identical to vanilla.
+- Work (WRITTEN): run the `integration` job via workflow_dispatch with `compat_mods` = `sodium` (see 3.1). Expect the same render counters as plain 1.21.11.
 - Done when: G2 and G3 pass with Sodium loaded.
 
 ### 2.2 Bobby (client)
@@ -53,6 +60,10 @@ Gaps, in priority order:
 5. **Slow/odd generators.** Capture is per loaded chunk, so a generator that fills chunks late (async worldgen) can send a tile before the chunk is final. Plan: the existing revision mechanism re-sends on change; test with a plugin that edits chunks after load.
 
 Server-side compatibility otherwise: Paper API only, no NMS. TODO: proxy test (Velocity/BungeeCord must forward the `awre:main` plugin channel). Java version requirements differ between Minecraft generations; check before building for 26.x.
+
+## 3.1 Compat clients in CI (WRITTEN, opt-in, informational)
+
+`workflow_dispatch` input `compat_mods`, e.g. `sodium sodium+iris bobby vulkanmod` (groups split on space/comma, `+` joins mods that load together; Iris needs Sodium, so use `sodium+iris`). `integration.sh` adds each group's mods through HeadlessMc's Modrinth support (`mod add mod <slug> fabric <mc>`), starts one client per group against the synthetic server, and records per group: no crash, handshake OK, "compat target loaded: <slug>" (RenderPolicy detection), G2 meshes, the render gate, no AWRE exceptions. A mod that cannot be installed for the version is reported as SKIPPED, not failed. Results appear in the summary under "Compat clients" as `COMPAT PASS/FAIL/NOTE`; they fail the job only with `COMPAT_STRICT=1`. Limits: headless counters prove the renderer RAN beside the mod, not that pixels are correct; Iris is loaded WITHOUT a shader pack, so this does not test shaded rendering. Logic tested offline with a mock HeadlessMc (success, skip, crash paths) and `tools/ci/compat-lib-test.sh`.
 
 ## 3. Policy for conflicting mods (WRITTEN, `RenderPolicy`)
 
