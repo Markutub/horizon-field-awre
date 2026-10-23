@@ -29,6 +29,7 @@ public final class AwreClientMod implements ClientModInitializer {
     private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
     private boolean lastShaderActive;
     private float lastDepthFar = -1;
+    private int lastEffectiveRd = -1;
 
     @Override
     public void onInitializeClient() {
@@ -71,7 +72,9 @@ public final class AwreClientMod implements ClientModInitializer {
             // view distance). The raw option (renderDistance().get()) hid ~450 tiles that vanilla was not drawing (G2 audit; signature from mc-api-dump).
             double vanilla = client.options.getEffectiveRenderDistance() * 16.0;
             float depthFar = client.gameRenderer.getDepthFar();       // diagnostic: tiles farther than the projection far plane are clipped by the hardware
-            if (depthFar != lastDepthFar) { lastDepthFar = depthFar; LOG.info("[AWRE] projection far plane {} blocks, effective render distance {} chunks", depthFar, client.options.getEffectiveRenderDistance()); }
+            int effectiveRd = client.options.getEffectiveRenderDistance();
+            // logged when EITHER changes: the first line is written in the main menu (no server distance yet); the in-world value is the one that matters
+            if (depthFar != lastDepthFar || effectiveRd != lastEffectiveRd) { lastDepthFar = depthFar; lastEffectiveRd = effectiveRd; LOG.info("[AWRE] projection far plane {} blocks, effective render distance {} chunks, in world: {}", depthFar, effectiveRd, client.level != null); }
             // ResourceKey#toString looks like "ResourceKey[minecraft:dimension / minecraft:overworld]"; parsed so the accessor name does not matter
             String dim = client.level == null ? null : dev.awre.stream.DimensionGate.fromResourceKeyString(String.valueOf(client.level.dimension()));
             runtime.onTick(client.player != null, client.level, client.player == null ? 0 : client.player.getX(), client.player == null ? 0 : client.player.getZ(), vanilla, dim);
