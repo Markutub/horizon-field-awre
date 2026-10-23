@@ -14,7 +14,7 @@ stream:
   import-horizon-cache: true      # first start only: copy plugins/HorizonField/cache/<world>.hfl (same format and fingerprint) if AWRE has no file yet
   persist: true                   # captured mode: keep terrain on disk (plugins/AWRE/terrain/<world>.hfl), replayed at start
   synthetic-chunk-radius: 0       # 0..99 (99 = 39 601 chunks, about 50 MB)
-  radius: 1000                    # blocks, 256..8000
+  radius: 1000                    # blocks, 256..8000. The client's projection far plane was measured at 2048 blocks (1.21.11): above ~2000 the extra tiles are clipped
   bytes-per-second: 250000        # per player, ASSUMED budget
   max-held-tiles: 4096            # 64..4096: a client meshes and keeps at most 4096 tiles resident (more would be held but never drawn)
   compact-garbage-ratio: 0.5      # 0.1..0.95: rewrite a world's cache file when this share of its tile records is superseded (checked every 30 s)

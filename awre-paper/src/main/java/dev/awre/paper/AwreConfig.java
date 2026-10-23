@@ -39,6 +39,7 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         if (synth < 0 || synth > 99) { log.warning("[AWRE] stream.synthetic-chunk-radius must be 0..99; using 0"); synth = 0; }
         double radius = c.getDouble("stream.radius", 1000);
         if (radius < 256 || radius > 8000) { log.warning("[AWRE] stream.radius must be 256..8000; using 1000"); radius = 1000; }
+        if (radius > 2000) log.warning("[AWRE] stream.radius " + radius + " exceeds the 2048-block projection far plane measured on 1.21.11 (client render distance 4 and 12): tiles beyond it are expected to be clipped by the GPU yet still cost bandwidth and memory (not yet confirmed in a frame)");
         double bps = c.getDouble("stream.bytes-per-second", 250_000);
         if (bps < 10_000 || bps > 50_000_000) { log.warning("[AWRE] stream.bytes-per-second out of range; using 250000"); bps = 250_000; }
         int held = c.getInt("stream.max-held-tiles", 4096);
