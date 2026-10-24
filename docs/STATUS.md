@@ -1,5 +1,20 @@
 # Project Status
 
+## Session 34 (Iris step 2 from Iris's public API; sandbox)
+
+- Research: Iris public API v0.3 reportedly has `assignPipeline(RenderPipeline, IrisProgram)` (secondary source; see `docs/COMPAT_PLAN.md` 2.3 for provenance and the 5 unknowns).
+- Added: `IrisReflection` (pure, by reflection, tested against fakes with Iris's names: 4 tests, stream now 95), `ShaderPackBridge#assignTerrainPipeline`, `HorizonRenderer#setShaderBridge` (assigns the plain pipeline at startup, logs ACCEPTED/NOT available; plain pipeline used while a pack is active), `-Dawre.iris=auto|off`, CI compat NOTE for the log line. `IrisBridge` is now a 5-line wrapper. Fabric side syntax-checked only.
+- NOT verified: that a real Iris for 1.21.11 has the method; anything visual under a pack.
+- Next: run `ci` with `compat_mods=sodium+iris`; read the `Iris assignPipeline` NOTE and the far-plane lines.
+
+## Session 33 (far plane from the real API dump; sandbox)
+
+Input: `mc-api-dump` artifact from CI on snapshot `2e111b8`-era code, plus snapshots `horizon-field-awre-g1_1.zip` (`2e111b8`) and `horizon-field-awre-g1_2.zip` (`1ff3a59`, adds the reveal effect/custom terrain shader; the far-plane change was re-applied on top of that renderer). Pure-Java on that snapshot: core 108, protocol 67, stream 84, 0 failures; with this session's `ProjectionExtenderTest`: stream 91.
+- Dump findings: `GameRenderer#getDepthFar()/getProjectionMatrix(float)/PROJECTION_Z_NEAR`, `PerspectiveProjectionMatrixBuffer#getBuffer(Matrix4f)`, `RenderSystem#setProjectionMatrix/getProjectionMatrixBuffer/getProjectionType`, `CachedPerspectiveProjectionMatrixBuffer`, Fabric START_MAIN/BEFORE_TRANSLUCENT/END_MAIN; **no Vulkan classes in 1.21.11**.
+- Added: `ProjectionExtender` (pure, tested: standard-matrix verification by implied near, refuses zero-to-one/other-near, caps far), `HorizonRenderer#extendedProjection` + projection swap with guaranteed restore, `-Dawre.far`, informational CI line. Default behaviour changes (far plane is extended unless `-Dawre.far=off`). Fabric side is syntax-checked only (ParseOnly); CI is the compile check.
+- Open: degrees assumption of `getProjectionMatrix`, whether clipping really occurred before, FOV effects, seam depth mismatch, fog. See `docs/COMPAT_PLAN.md` 1.1. Rollback: `-Dawre.far=off`.
+- Next: run CI (look for `[AWRE] far plane:` or `far plane NOT extended`), then the human-visible check (`MANUAL_RENDER_TEST.md`) with and without `-Dawre.far=off` to confirm the difference.
+
 ## Session 32 (compat + API discovery; sandbox, nothing run in CI yet)
 
 Starting point: snapshot `horizon-field-awre-g1.zip` (HEAD `e2f2b6e`), which already contains the session 22-25 patches (dimension fix, deferred free, `ClientRuntime`, `RenderPolicy`, `BiomeTint`, uniform write order). Pure-Java re-run on this snapshot: core 98, protocol 67, stream 64, all 0 failures.

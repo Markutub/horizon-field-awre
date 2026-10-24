@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * Minecraft generation rewrites this file and HorizonRenderer, nothing else.
  *
  * <p>JVM properties: {@code -Dawre.render=auto|on|off} (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
- * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
+ * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|off} (auto: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
  */
 public final class AwreClientMod implements ClientModInitializer {
     static final Logger LOG = LoggerFactory.getLogger("AWRE");
@@ -43,8 +43,10 @@ public final class AwreClientMod implements ClientModInitializer {
         loadColorOverrides();
         loadBiomeOverrides();
         shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
+        renderer.setShaderBridge(shaderBridge, !"off".equalsIgnoreCase(System.getProperty("awre.iris", "auto")));
 
         double maxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
+        renderer.configureFar(System.getProperty("awre.far", "auto"), maxDistance);
         runtime = new ClientRuntime<>(new ClientRuntime.Host() {
             @Override public void send(byte[] frame) { AwreClientMod.this.send(frame); }
             @Override public void info(String m) { LOG.info(m); }
@@ -66,7 +68,7 @@ public final class AwreClientMod implements ClientModInitializer {
             boolean shaders = shaderBridge.shaderPackActive();
             if (shaders != lastShaderActive) {
                 lastShaderActive = shaders;
-                LOG.info("[AWRE] shader pack {}{}", shaders ? "ACTIVE" : "inactive", shaders ? ": AWRE terrain is drawn with a vanilla shader and is NOT shaded yet (docs/COMPAT_PLAN.md, Iris step 2)" : "");
+                LOG.info("[AWRE] shader pack {}{}", shaders ? "ACTIVE" : "inactive", shaders ? ": plain terrain pipeline is used (no reveal effect); whether the pack shades it depends on Iris accepting assignPipeline (see the assignPipeline log line); UNVERIFIED visually" : "");
             }
             // The square vanilla really draws is limited by what the SERVER sends: Options#getEffectiveRenderDistance() is min(client option, server
             // view distance). The raw option (renderDistance().get()) hid ~450 tiles that vanilla was not drawing (G2 audit; signature from mc-api-dump).
@@ -79,7 +81,7 @@ public final class AwreClientMod implements ClientModInitializer {
             String dim = client.level == null ? null : dev.awre.stream.DimensionGate.fromResourceKeyString(String.valueOf(client.level.dimension()));
             runtime.onTick(client.player != null, client.level, client.player == null ? 0 : client.player.getX(), client.player == null ? 0 : client.player.getZ(), vanilla, dim);
         });
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); runtime.shutdown(); renderer.setPlanner(null); });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { renderer.releaseAll(); runtime.shutdown(); renderer.setPlanner(null); renderer.shutdown(); });
 
         // CI-confirmed (session 18 build log): WorldRenderEvents.END_MAIN exists and Camera#position() compiles, but WorldRenderContext has NO
         // positionMatrix(). The view matrix is built from the camera rotation (world -> view, no translation: the translation is the

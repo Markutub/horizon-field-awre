@@ -37,7 +37,7 @@ Deferred GPU free (`MeshResidency` freeDelayFrames=3, unit-tested with a fake GP
 | Mod | Expected | Status |
 |---|---|---|
 | Sodium | TARGET. We draw our own pass from a Fabric API world-render event, not through Sodium's chunk renderer | NOT TESTED |
-| Iris / shader packs | TARGET. Today AWRE terrain uses a vanilla shader after the scene, so it will NOT be shaded by the pack (no shadows, mismatched lighting/fog). Real support needs work inside Iris's pipeline | NOT TESTED, known gap |
+| Iris / shader packs | TARGET. AWRE asks Iris (public API `assignPipeline`, by reflection) to shade the plain terrain pipeline with the pack's TERRAIN program; only fakes tested. Whether Iris accepts it, and whether the result looks right with a pack, is unknown | NOT TESTED; run `compat_mods=sodium+iris`, read the "Iris assignPipeline" NOTE, then look with a pack |
 | Bobby | TARGET. Bobby makes cached chunks real chunks inside the render-distance setting; AWRE skips tiles inside that setting, so they should meet without overlap | NOT TESTED |
 | Distant Horizons, Voxy | Overlap with what AWRE draws | NOT TESTED (disabled in `auto`) |
 | Other Fabric mods | No known interaction | NOT TESTED |

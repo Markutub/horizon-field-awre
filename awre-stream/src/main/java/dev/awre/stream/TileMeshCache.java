@@ -20,14 +20,15 @@ public final class TileMeshCache {
     private record Entry(long revision, TerrainMesher.Mesh mesh) { }
 
     private final ClientSession session;
-    private final Map<TileKey, Entry> cache;
+    private final Map<TileKey, TileMeshCache.Entry> cache;
     private long hits, misses, failures;
 
     public TileMeshCache(ClientSession session, int capacity) {
         if (capacity < 1) throw new IllegalArgumentException("capacity");
         this.session = session;
         this.cache = new LinkedHashMap<>(64, 0.75f, true) {
-            @Override protected boolean removeEldestEntry(Map.Entry<TileKey, Entry> e) { return size() > capacity; }
+            // TileMeshCache.Entry is spelled out on purpose: inside a LinkedHashMap subclass the bare name `Entry` can resolve to Map.Entry (JDK 25), a name clash
+            @Override protected boolean removeEldestEntry(Map.Entry<TileKey, TileMeshCache.Entry> e) { return size() > capacity; }
         };
     }
 

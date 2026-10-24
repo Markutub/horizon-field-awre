@@ -32,7 +32,7 @@ class DropTest {
         assertEquals(Reason.OUT_OF_RANGE, assertThrows(ProtocolException.class, () -> TileDrop.decode(many, lim)).reason());
         byte[] lod = new ByteWriter().i64(1).i64(2).string(DIM, 48).u16(1).i32(0).i32(0).u8(lim.maxLod() + 1).toByteArray();
         assertEquals(Reason.OUT_OF_RANGE, assertThrows(ProtocolException.class, () -> TileDrop.decode(lod, lim)).reason());
-        byte[] far = new ByteWriter().i64(1).i64(2).string(DIM, 48).u16(1).i32((int) lim.maxTileCoord() + 1).i32(0).u8(0).toByteArray();
+        byte[] far = new ByteWriter().i64(1).i64(2).string(DIM, 48).u16(1).i32(lim.maxTileCoord() + 1).i32(0).u8(0).toByteArray();
         assertEquals(Reason.OUT_OF_RANGE, assertThrows(ProtocolException.class, () -> TileDrop.decode(far, lim)).reason());
         byte[] noDim = new ByteWriter().i64(1).i64(2).string("", 48).u16(1).i32(0).i32(0).u8(0).toByteArray();
         assertEquals(Reason.BAD_FIELD, assertThrows(ProtocolException.class, () -> TileDrop.decode(noDim, lim)).reason());

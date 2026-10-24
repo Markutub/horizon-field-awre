@@ -141,6 +141,10 @@ check "G2 vanilla radius = min(client $CLIENT_RD, server $SERVER_VD) chunks (+1 
 # when diagnosing: received -> mesh_built -> gpu_uploaded -> submitted_draws. Only submitted_draws>0 means the renderer issued draws.
 if grep -Eq '\[AWRE\] render: .*gpu_uploaded=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) GPU upload happened"; else echo "INFO: G3 no GPU upload logged (renderer not reached or failed; see clientA.log)"; fi
 if grep -Eq '\[AWRE\] render: .*submitted_draws=[1-9]' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) draw calls submitted"; else echo "INFO: G3 no submitted draws logged"; fi
+# far plane (informational): the renderer logs either the planes it used or why it kept vanilla's (docs/COMPAT_PLAN.md 1.1)
+if grep -q '\[AWRE\] far plane NOT extended' "$OUT/clientA.log" 2>/dev/null; then echo "INFO: far plane NOT extended: $(grep -m1 'far plane NOT extended' "$OUT/clientA.log" | cut -c1-300)"
+elif grep -q '\[AWRE\] far plane: ' "$OUT/clientA.log" 2>/dev/null; then pass "G3 (info) far plane extended: $(grep -m1 '\[AWRE\] far plane: ' "$OUT/clientA.log" | sed 's/.*far plane: //' | cut -c1-160)"
+else echo "INFO: far plane: no log line (renderer never reached the projection step, or -Dawre.far=off)"; fi
 grep -E '\[AWRE\] render:' "$OUT/clientA.log" | tail -3 || true
 echo "--- capture/timing lines (server, informational; see docs/MEASUREMENT_PLAN.md) ---"
 grep -h '\[AWRE\] capture:' "$OUT"/server*.log 2>/dev/null | tail -3 || true
@@ -214,7 +218,9 @@ if [ -n "${COMPAT_MODS// /}" ]; then
     if grep -En 'AWRE.*(Exception|rejected)' "$L" > /dev/null 2>&1; then
       cfail "$grp" "AWRE-related exception in log"; grep -En -m2 -A8 'AWRE.*(Exception|rejected)' "$L" | head -24
     fi
-    grep -E '\[AWRE\] (shader pack|compat target|LOD mod)' "$L" | sort -u | head -5 || true
+    grep -E '\[AWRE\] (shader pack|compat target|LOD mod|Iris assignPipeline|far plane)' "$L" | sort -u | head -8 || true
+    # informational: did this Iris accept assignPipeline(pipeline -> TERRAIN)? (answers the API question for the installed Iris build)
+    if grep -q 'Iris assignPipeline' "$L" 2>/dev/null; then cnote "$grp" "$(grep -m1 'Iris assignPipeline' "$L" | sed 's/.*\[AWRE\] //' | cut -c1-200)"; fi
     stop_client
     for f in $added; do rm -f "$MODS_DIR/$f"; done      # restore the baseline mods dir for the next group
   done

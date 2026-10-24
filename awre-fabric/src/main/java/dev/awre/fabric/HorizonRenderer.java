@@ -1,6 +1,8 @@
 package dev.awre.fabric;
 
+import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -9,12 +11,15 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.awre.protocol.TileKey;
 import dev.awre.stream.HorizonDrawPlanner;
 import dev.awre.stream.MeshResidency;
+import dev.awre.stream.ProjectionExtender;
 import dev.awre.stream.VertexPacker;
 import dev.horizonfield.core.terrain.TerrainMesher;
 import java.util.List;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.PerspectiveProjectionMatrixBuffer;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -106,6 +111,73 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
         m.indices().close();
     }
 
+    // ---- far plane (docs/COMPAT_PLAN.md 1.1). Signatures are from the CI api dump of the real 1.21.11 jar, not memory:
+    // GameRenderer#getDepthFar(), GameRenderer#getProjectionMatrix(float), GameRenderer.PROJECTION_Z_NEAR, PerspectiveProjectionMatrixBuffer#getBuffer(Matrix4f),
+    // RenderSystem#setProjectionMatrix(GpuBufferSlice, ProjectionType) / #getProjectionMatrixBuffer() / #getProjectionType(), Minecraft.options.fov().
+    // STILL UNVERIFIED: that getProjectionMatrix takes degrees (vanilla passes options.fov, e.g. 70, to it) and that getBuffer's write is an
+    // encoder command (so it is done before the render pass opens, like the uniforms).
+    private float farSetting = Float.NaN;          // NaN = auto, 0 = off (vanilla projection), >0 = explicit far plane in blocks
+    private double viewMaxDistance = 16384;
+    private PerspectiveProjectionMatrixBuffer projectionBuffer;
+    private boolean farLogged, farRefusedLogged;
+
+    /** @param setting value of -Dawre.far ("auto" | "off" | blocks); @param viewMaxDistance the planner's max distance in blocks */
+    void configureFar(String setting, double viewMaxDistance) {
+        this.farSetting = ProjectionExtender.parseFarSetting(setting);
+        this.viewMaxDistance = viewMaxDistance;
+    }
+
+    // ---- shader packs (docs/COMPAT_PLAN.md 2.3) ----
+    private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
+
+    /**
+     * @param assign true: ask the shader-pack mod (Iris) to render the PLAIN terrain pipeline with the pack's terrain program, so a pack can
+     *               shade AWRE terrain. UNVERIFIED against a real Iris for 1.21.11 (API per a secondary source); the outcome is logged.
+     */
+    void setShaderBridge(dev.awre.stream.compat.ShaderPackBridge bridge, boolean assign) {
+        this.shaderBridge = bridge == null ? dev.awre.stream.compat.ShaderPackBridge.NONE : bridge;
+        if (this.shaderBridge == dev.awre.stream.compat.ShaderPackBridge.NONE) return;
+        if (!assign) { LOG.info("[AWRE] Iris assignPipeline skipped (-Dawre.iris=off)"); return; }
+        boolean ok;
+        try { ok = this.shaderBridge.assignTerrainPipeline(PIPELINE); } catch (Throwable t) { ok = false; }
+        LOG.info("[AWRE] Iris assignPipeline(plain terrain pipeline -> TERRAIN): {}", ok ? "ACCEPTED" : "NOT available (shader packs will not shade AWRE terrain)");
+    }
+
+    /** Client stopping (render thread): closes the projection buffer. */
+    void shutdown() {
+        if (projectionBuffer != null) { projectionBuffer.close(); projectionBuffer = null; }
+    }
+
+    /**
+     * The level projection with a larger far plane, as a GPU slice, or null to keep vanilla's. Writes a GPU buffer, so it must be called
+     * BEFORE the render pass opens. FOV note: only the base FOV option is used; FOV effects (sprinting, potions) are not tracked here, so
+     * while they are active AWRE terrain is drawn with a slightly different field of view than vanilla.
+     */
+    private GpuBufferSlice extendedProjection(Minecraft mc) {
+        if (farSetting == 0f) return null;
+        GameRenderer gr = mc.gameRenderer;
+        float vanillaFar = gr.getDepthFar();
+        float wanted = Float.isNaN(farSetting) ? ProjectionExtender.chooseFar(viewMaxDistance, vanillaFar) : Math.max(vanillaFar, farSetting);
+        if (!(wanted > vanillaFar)) return null;
+        Matrix4f vanilla = gr.getProjectionMatrix(mc.options.fov().get().floatValue());
+        ProjectionExtender.Z z = ProjectionExtender.extendFar(vanilla.m22(), vanilla.m32(), vanilla.m23(), GameRenderer.PROJECTION_Z_NEAR, wanted);
+        if (z == null) {
+            if (!farRefusedLogged) {
+                farRefusedLogged = true;
+                LOG.warn("[AWRE] far plane NOT extended: the level projection is not a standard perspective matrix (m22={} m32={} m23={}, expected near {}); terrain will be clipped at vanilla's far plane {}",
+                        vanilla.m22(), vanilla.m32(), vanilla.m23(), GameRenderer.PROJECTION_Z_NEAR, vanillaFar);
+            }
+            return null;
+        }
+        if (!farLogged) {
+            farLogged = true;
+            LOG.info("[AWRE] far plane: vanilla={} awre={} (near={}, implied near of vanilla matrix={}, setting={})", vanillaFar, Math.min(wanted, ProjectionExtender.MAX_FAR),
+                    GameRenderer.PROJECTION_Z_NEAR, ProjectionExtender.impliedNear(vanilla.m22(), vanilla.m32()), Float.isNaN(farSetting) ? "auto" : farSetting);
+        }
+        if (projectionBuffer == null) projectionBuffer = new PerspectiveProjectionMatrixBuffer("awre horizon projection");
+        return projectionBuffer.getBuffer(new Matrix4f(vanilla).m22(z.m22()).m32(z.m32()));
+    }
+
     // ---- per frame ----
 
     /**
@@ -126,7 +198,8 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
             // API-ASSUMPTION: DynamicUniforms.writeTransform(modelView, colour, modelOffset, texMatrix).
             List<java.util.function.Consumer<RenderPass>> uniformBinders = new java.util.ArrayList<>(draws.size());
             RenderPipeline pipeline = PIPELINE;
-            boolean useReveal = animator.enabled() && !revealBroken;
+            // a shader pack replaces the terrain program of the plain pipeline; the reveal shader (own uniforms) cannot run inside a pack
+            boolean useReveal = animator.enabled() && !revealBroken && !shaderBridge.shaderPackActive();
             if (useReveal) {
                 try { pipeline = RevealPipeline.PIPELINE; }
                 catch (Throwable t) { revealBroken = true; useReveal = false; LOG.warn("[AWRE] reveal pipeline could not be created; using the plain terrain pipeline", t); }
@@ -149,31 +222,44 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
             if (useReveal && !revealLogged) { revealLogged = true; LOG.info("[AWRE] reveal effect active (params {})", animator.params()); }
             final RenderPipeline usedPipeline = pipeline;
             revealThisFrame = useReveal;
+            stage = "projection";
+            GpuBufferSlice extended = extendedProjection(Minecraft.getInstance());      // writes a GPU buffer: before the pass opens
             stage = "getMainRenderTarget";
             // API-ASSUMPTION: main render target exposes color/depth texture views; CommandEncoder.createRenderPass(label, color, clear, depth, clearDepth).
             var target = Minecraft.getInstance().getMainRenderTarget();
-            stage = "createRenderPass";
-            RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                    () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty());
-            try (pass) {
-                stage = "setPipeline";
-                pass.setPipeline(usedPipeline);
-                // API-ASSUMPTION: bindDefaultUniforms(pass) binds Projection/Fog/Globals.
-                stage = "bindDefaultUniforms";
-                RenderSystem.bindDefaultUniforms(pass);
-                int i = 0;
-                for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {
-                    stage = "setUniform";
-                    uniformBinders.get(i++).accept(pass);
-                    stage = "setVertexBuffer";
-                    pass.setVertexBuffer(0, d.handle().vertices());
-                    stage = "setIndexBuffer";
-                    pass.setIndexBuffer(d.handle().indices(), VertexFormat.IndexType.INT);
-                    stage = "drawIndexed";
-                    pass.drawIndexed(0, 0, d.indexCount(), 1);      // API-ASSUMPTION: (baseVertex, firstIndex, indexCount, instanceCount)
-                    submitted++;
+            GpuBufferSlice previousProjection = null;
+            ProjectionType previousType = null;
+            if (extended != null) {                  // the rest of vanilla's level rendering must see ITS projection again afterwards
+                previousProjection = RenderSystem.getProjectionMatrixBuffer();
+                previousType = RenderSystem.getProjectionType();
+                RenderSystem.setProjectionMatrix(extended, ProjectionType.PERSPECTIVE);
+            }
+            try {
+                stage = "createRenderPass";
+                RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                        () -> "awre terrain", target.getColorTextureView(), OptionalInt.empty(), target.getDepthTextureView(), OptionalDouble.empty());
+                try (pass) {
+                    stage = "setPipeline";
+                    pass.setPipeline(usedPipeline);
+                    // API-ASSUMPTION: bindDefaultUniforms(pass) binds Projection/Fog/Globals.
+                    stage = "bindDefaultUniforms";
+                    RenderSystem.bindDefaultUniforms(pass);
+                    int i = 0;
+                    for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {
+                        stage = "setUniform";
+                        uniformBinders.get(i++).accept(pass);
+                        stage = "setVertexBuffer";
+                        pass.setVertexBuffer(0, d.handle().vertices());
+                        stage = "setIndexBuffer";
+                        pass.setIndexBuffer(d.handle().indices(), VertexFormat.IndexType.INT);
+                        stage = "drawIndexed";
+                        pass.drawIndexed(0, 0, d.indexCount(), 1);      // API-ASSUMPTION: (baseVertex, firstIndex, indexCount, instanceCount)
+                        submitted++;
+                    }
+                    stage = "closePass";
                 }
-                stage = "closePass";
+            } finally {
+                if (extended != null && previousProjection != null && previousType != null) RenderSystem.setProjectionMatrix(previousProjection, previousType);
             }
         } catch (RuntimeException e) {
             if (revealThisFrame) {                 // a shader/pipeline problem must never cost the terrain: this frame is lost, later frames use the plain pipeline

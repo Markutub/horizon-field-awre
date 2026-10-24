@@ -6,6 +6,7 @@ import dev.horizonfield.core.CaptureBacklog;
 import dev.horizonfield.core.ChunkView;
 import dev.horizonfield.core.MaterialPalette;
 import dev.horizonfield.core.Metrics;
+import dev.horizonfield.core.TileLog;
 import dev.horizonfield.core.lod.LodKey;
 import dev.horizonfield.core.terrain.TerrainStore;
 import java.nio.file.Files;
@@ -84,6 +85,10 @@ class RevalidationSweepTest {
         }
         TerrainStore store2 = new TerrainStore(3, TerrainStore.Reduce.MEAN, 1000);
         try (TerrainPersistence p2 = TerrainPersistence.open(file, "fp-sweep", store2, new MaterialPalette(), new Metrics())) {
+            TileLog.LoadReport report = p2.report();                   // also keeps the try-resource referenced (javac -Xlint:try)
+            assertFalse(report.freshStart(), "the restart must replay the existing log, not start fresh: " + report.reason());
+            assertEquals(0, report.discardedBytes(), "a cleanly closed log has nothing to discard");
+            assertTrue(report.tiles() > 0);
             assertEquals(total, store2.chunkCount());
             assertEquals(store.tile(new LodKey(0, 5, 0)).topAt(3, 4), store2.tile(new LodKey(0, 5, 0)).topAt(3, 4), "the edit survives a restart");
         }
