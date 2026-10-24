@@ -1,0 +1,35 @@
+# Honest review of AWRE G1 at `e43858b` (Session 32)
+
+Scope: the supplied tree, read and tested offline (no Gradle, no GPU, no Minecraft, no real Paper server). **VERIFIED** = I ran it or read it in this tree; **USER-SUPPLIED** = from the user's CI logs of an earlier commit (`1f03353`: 41 PASS / 0 FAIL; no logs were supplied for `e43858b`); **NOT VERIFIED** = everything else. My own numbers come from a 1-vCPU sandbox with cold JIT on synthetic terrain, which is smoother than real terrain, so treat them as lower bounds.
+
+## What is solid
+- **Engine discipline.** Pure-Java core/protocol/stream with 118 / 73 / 112 passing tests (VERIFIED, after my additions), bounded queues, per-tile monotonic revisions, camera-relative coordinates, bounded inflate, per-record CRC in the cache. The tests include fuzzing and decompression bombs.
+- **The CI evidence loop works.** A client throughput cap (40 tiles/s = 4 in flight x 10 Hz) was found from CI logs, reproduced offline, fixed (`maxInFlight` 64) and **confirmed by the next CI run** (154 tiles/s, full horizon about 5 s after the stream ends; USER-SUPPLIED). That is the project's best practice: measure, model, fix, re-measure.
+- **Honest labelling.** The docs say VERIFIED / UNVERIFIED; the author team did not claim in-game rendering.
+- **Defensive choices that held up:** the store cap never drops held chunks; the client has a byte budget (256 MiB default); real I/O errors no longer truncate a healthy cache.
+
+## What is weak, ranked by how much it matters
+1. **"Terrain is visible on screen" is still unproven by any automated check.** CI proves meshes are built, uploaded and draw calls submitted (`gpu_resident=2064`, `draws` > 0 in the render line). The reference PNGs are a CPU raster of the same meshes. `render_smoke` defaults to off (`ci.yml` input default `false`); there is no screenshot capability anywhere in the mod (`grep -ri screenshot` over `awre-fabric` and `awre-stream` finds nothing); the 220-line `docs/MANUAL_TEST_PLAN.md` has an empty report template, so no human result exists. Everything downstream of "draw call submitted" (depth, fog seam, colour, culling, shader packs) is NOT VERIFIED.
+2. **Server cost is unmeasured at the scale that matters.** The only data is one CI run with 187 chunks on a 2-vCPU runner: snapshot p99 4.45 ms (max 5.49), capture tick p99 2.06 ms (max 5.81) (USER-SUPPLIED). That already exceeds the project's own 2 ms acceptance figure, on a sample 20x smaller than the 4,100-chunk test the HANDOFF requires. The 600 s revalidation sweep re-queues every loaded chunk, so its cost is also unmeasured. MSPT with and without the plugin has never been recorded.
+3. **The store cap has a priority inversion.** `TerrainStore.put` refuses a chunk at a NEW coordinate when the store is full and never evicts, and the cache replays oldest-first. After the cap is reached, new areas the player explores are silently not captured (counted in `rejectedChunks`, not shown to the player). The cap protects the heap but makes "what is visible" depend on history instead of on where the player is. (SOURCE; `TerrainStoreCapTest` pins the refuse-new behaviour as intended.)
+4. **Data model limits are unguarded.** One surface per 1x1 column. No environment handling anywhere (`grep getEnvironment|NETHER|hasCeiling` over `awre-paper` and `awre-stream` is empty), so a Nether world would stream its roof as terrain. A tile that fails the retry limit is blacklisted until reconnect, even after an edit changes its revision (SOURCE).
+5. **Reproducibility.** `fabric-loom` is `1.14-SNAPSHOT` and the Paper API is `1.21.11-R0.1-SNAPSHOT` (both floating); `gradle.properties` defaults `javaRelease=25` while CI only builds `-PjavaRelease=21`, so Java 25 is declared but never built.
+6. **Compile feedback is slow.** The sandbox can only syntax-check Paper/Fabric code (`ParseOnly`); real compile errors surface after a push. This engagement produced exactly one (`EntityExplodeEvent#getBlockList`, my mistake).
+7. **Documentation drift.** 23 docs; `HANDOFF.md` is 238 lines and had **six** sections labelled "(LATEST)" (Sessions 18, 19, 20, 21, 26, 27) above newer ones. The next AI will trust whichever it reads first. (Fixed mechanically in this delivery.)
+8. **Compatibility is detection, not support.** Iris is detected and logged; drawing inside a shader-pack pipeline is unbuilt. `COMPATIBILITY.md` cells remain UNVERIFIED.
+9. **Concurrency is untested at player count.** One async job per player (busy flag) means N players run N CPU-heavy jobs on Bukkit's unbounded async pool (hypothesis: not measured, not tested with concurrent abusive or normal clients).
+10. **No authentication or confidentiality on the AWRE channel.** CRC is integrity against accidents only. Acceptable under "the connection is already authenticated by Minecraft", but it is an unwritten assumption.
+
+## Defects I found and fixed in this tree (VERIFIED by tests that fail without the fix)
+- **A CRC-valid but undecodable record discarded the whole terrain cache** (file 2029 B -> 20 B) while the earlier tiles had already been replayed into memory. Now the log is cut at that record. Test: `TileLogCorruptionTest` (3 tests: forged length near `Integer.MAX_VALUE`, CRC-valid garbage, 1,500 random mutations + every 7th truncation). The integer-overflow variant had already been fixed by the user's `MAX_RECORD_BYTES` change; the test confirms it.
+- **Not a defect, now pinned:** hostile server vs client memory. With a 64 KB-tile flood (no protocol violation, so no strike) the client holds up to its byte budget (256 MiB default; 185 MiB after 3,000 tiles measured). `HostileServerTest` (3) and `CompressionAbuseTest` (3) lock the accounting, the newest-tile guarantee and decompression-bomb limits (up to a 256 MiB expansion rejected in under 500 ms without a large allocation).
+
+## Where my own work was wrong or weak
+- I audited an older snapshot first and reported a client-memory problem that the newer tree had already fixed (the budget existed, default 256 MiB, 4x my proposal). Always diff against the newest tree before claiming a defect.
+- My first hypothesis for the `built - uploaded = 4` gap (hidden parents) was wrong; the real cause was sampling order, and the real finding was elsewhere (the 40 tiles/s cap).
+- One compile error reached CI because only syntax was checked.
+- The sandbox benchmarks (memory 1,322 -> 430 B/chunk, build rate, scale) are synthetic and single-run.
+- I did not complete the five-document audit set requested earlier (only baseline and pipeline were drafted, against `1f03353`); their evidence is folded into this review instead of shipping a half-finished set that implies full coverage.
+
+## Overall status
+**READY FOR EXPERIMENTAL TESTING, not for a pilot.** Evidence: the pipeline reaches GPU upload and submitted draw calls in CI; 41/0 integration; strong unit/adversarial coverage; bounded memory on both sides. Blocking a pilot: no pixel-level proof (1), no server-cost measurement at scale (2), and the store-cap behaviour (3).

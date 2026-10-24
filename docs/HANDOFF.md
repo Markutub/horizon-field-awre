@@ -1,5 +1,9 @@
 # HANDOFF — read this first (for the next AI / developer)
 
+## 2026-10-23 (Session 32) honest review, next-phase prompt, two verified test/fix additions (LATEST)
+
+Read `docs/REVIEW_HONEST.md` (ranked weaknesses, evidence labels) and `docs/NEXT_PHASE_PROMPT.md` (the brief for the next session). Supplied tree `e43858b`; no CI logs for it. Changes: `TileLog.open` now cuts the log at a CRC-valid but undecodable record instead of discarding the whole cache (test fails without the fix: file 2029 B -> 20 B); new adversarial tests `TileLogCorruptionTest`, `HostileServerTest`, `CompressionAbuseTest`. Pure Java in the sandbox: core 118, protocol 73, stream 112, render-gate all pass; Paper/Fabric syntax-checked only. Removed the stale latest-markers from 6 older headings so only this one is marked.
+
 ## 2026-10-23 (Session 31) evidence from CI run `integration-logs` + `reference-frames`; client build throughput fix
 
 Evidence reviewed (supplied by the user, commit SHA not supplied): `integration-logs.zip` (summary 32 PASS / 0 FAIL, the Session 30 render-line tokens are present, so this run includes Session 30), `reference-frames.zip` (4 PNGs: **byte-identical** to the ones `tools/preview/run-reference-frame.sh` renders in the sandbox; geometry check only, not an in-game frame).
@@ -22,7 +26,7 @@ Evidence reviewed: supplied snapshot, git HEAD `fa3148b` ("nothing special"); no
 - **Next CI run decides:** read the render line of `clientA.log`. `built_waiting=0` and `built_not_wanted=4` closes the observation as benign; `built_waiting>0` that does not drain is a real upload-budget/cap problem.
 - Still NOT VERIFIED (unchanged): fresh Gradle builds of this exact tree, `render_smoke` x3, human-visible rendering, server cost, compatibility with other mods. The user-run tasks of Session 29 stay as listed there.
 
-## 2026-10-22 (Session 27) evidence addendum (LATEST)
+## 2026-10-22 (Session 27) evidence addendum
 
 Evidence reviewed: supplied `horizon-field-awre-g1` snapshot (`dbbaae9`), `gradle-reports` (209 tests), `integration-logs` (32 PASS / 0 FAIL). Start with the table below, then `docs/STATUS.md`.
 
@@ -98,19 +102,19 @@ Next tasks (acceptance criteria):
 
 The user must run locally (this session could not): the two Gradle commands in task 1, `bash tools/ci/render-gate-test.sh`, and, if a display is available, `docs/MANUAL_RENDER_TEST.md`. Git: nothing was committed, pushed or re-pointed; the working tree has uncommitted Session 27 edits.
 
-## Session 26 addendum (LATEST)
+## Session 26 addendum
 G1 audit (`docs/AUDIT_G1.md`): fixed capture-request loss (`CaptureBacklog`), missing edit events + periodic sweep, packed `ColumnTile` (1.32 -> 0.43 KB/chunk measured), biome-aware snapshots. core 93 / protocol 67 / stream 49. Paper/Fabric syntax-checked only: push, read the `build` job, then measure on a real server. Next: AUDIT_G1 section 7.
 
-## Session 21 addendum (LATEST) — PHASE_03 started while CI for the session-20 fix was pending
+## Session 21 addendum — PHASE_03 started while CI for the session-20 fix was pending
 Added CrackBench + floor skirts (docs/phases/PHASE_03.md). The Fabric build result of the session-20 `Camera#rotation()` fix was not available. Next: read that CI run first; then real-terrain CrackBench on a real `.hfl`.
 
-## Session 20 addendum (LATEST) — first real Fabric build result
+## Session 20 addendum — first real Fabric build result
 User supplied the CI log of `gradle -p awre-fabric build` on session 18 code: Loom 1.14.10, ONE error: `WorldRenderContext.positionMatrix()` does not exist (AwreClientMod:56). Everything else javac checked compiled. Fixed by building the view matrix from `Camera#rotation()`. Re-run CI; if the next error is in `HorizonRenderer` (blaze3d names), fix those one by one; the list is in PHASE_01.md. Loom warning "Cannot remap modifiers because it does not exists in any of the targets []" was in the log; it did not stop the build.
 
-## Session 19 addendum (LATEST) — PHASE_02 started
+## Session 19 addendum — PHASE_02 started
 User said CI was "all green" (unverified by me). Delivered: `DimensionGate` + wiring (real bug: old dimension re-uploaded after a dimension change), `WorldCorrectnessTest` (randomized coverage property, revisions, reconnects). Pure-Java 71/67/38 pass. Next: in-game checks in PHASE_02.md, far-plane clipping, then PHASE_03 (real-terrain fidelity) once visible output is confirmed.
 
-## Session 18 addendum (LATEST) — PHASE_01 render path
+## Session 18 addendum — PHASE_01 render path
 Sandbox had no network: only pure-Java verification. Delivered: tile-local meshes (`TerrainMesher.meshLocal`), `VertexPacker`, `CameraRelative`, `MeshResidency`, `HorizonDrawPlanner`, `ClientHorizonView.select/candidateOrder`, `HorizonRenderer` + wiring in `AwreClientMod`, 11 new tests (core 71, stream 32, protocol 67 all pass). A new test found and fixed a real double-layer bug in coverage selection.
 NOT done / unknown: Gradle build of `awre-fabric` (HorizonRenderer uses blaze3d names from memory, 7 listed API-ASSUMPTIONs in docs/phases/PHASE_01.md), CI run, in-game visibility, far-plane clipping of distant tiles.
 Next: (1) push and read the `build` job; fix HorizonRenderer/AwreClientMod compile errors only; (2) run the manual procedure in PHASE_01.md and the `[AWRE] render:` log line; (3) if terrain is clipped, give the draw pass a projection with a larger far plane; (4) then PHASE_02.

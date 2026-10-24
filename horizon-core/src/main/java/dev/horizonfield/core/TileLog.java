@@ -149,11 +149,22 @@ public final class TileLog implements AutoCloseable {
                             crc.update(payload, 0, len);
                             int stored = ((tail[0] & 0xFF) << 24) | ((tail[1] & 0xFF) << 16) | ((tail[2] & 0xFF) << 8) | (tail[3] & 0xFF);
                             if ((int) crc.getValue() != stored) break;
-                            if (type == T_PALETTE) {
-                                DataInputStream p = new DataInputStream(new ByteArrayInputStream(payload));
-                                palette.restore(p.readShort(), p.readUTF());
-                            } else if (type == T_TILE) {
-                                ColumnTile ct = decodeTile(payload);
+                            ColumnTile ct = null;
+                            try {
+                                if (type == T_PALETTE) {
+                                    DataInputStream p = new DataInputStream(new ByteArrayInputStream(payload));
+                                    palette.restore(p.readShort(), p.readUTF());
+                                } else if (type == T_TILE) {
+                                    ct = decodeTile(payload);
+                                }
+                            } catch (java.io.UncheckedIOException real) {
+                                throw real;                       // a real I/O error is not a bad record
+                            } catch (IOException | RuntimeException badRecord) {
+                                // CRC-valid but undecodable (crafted, or written by a buggy build): cut the log HERE like a torn tail.
+                                // The records before it were already replayed and are still good; they must not be discarded with the file.
+                                break;
+                            }
+                            if (ct != null) {
                                 keys.add(HeightPyramid.key(ct.chunkX(), ct.chunkZ()));
                                 sink.accept(ct);
                                 tiles++;
