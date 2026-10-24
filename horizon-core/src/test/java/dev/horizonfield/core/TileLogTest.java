@@ -159,4 +159,68 @@ class TileLogTest {
         assertEquals(0L, o.report().discardedBytes());
         o.log().close();
     }
+
+    @Test
+    void streamedReplayHandlesRecordsCrossingTheReadWindowAndKeepsOrder() throws Exception {
+        Path f = Files.createTempDirectory("hf-test").resolve("big.hfl");
+        MaterialPalette pal = new MaterialPalette();
+        int stone = pal.idOf("minecraft:stone");
+        TileLog.Opened o = TileLog.open(f, "fp-big", pal, t -> { });
+        int n = 6000;
+        for (int i = 0; i < n; i++) o.log().append(TestUtil.flat(i % 100, i / 100, 40 + (i % 50), stone));
+        o.log().close();
+        assertTrue(Files.size(f) > 3 * (1 << 16), "premise: the log spans several 64 KiB read windows: " + Files.size(f));
+
+        MaterialPalette pal2 = new MaterialPalette();
+        List<ColumnTile> got = new ArrayList<>();
+        TileLog.Opened o2 = TileLog.open(f, "fp-big", pal2, got::add);
+        assertFalse(o2.report().freshStart());
+        assertEquals(n, o2.report().tiles());
+        assertEquals(0, o2.report().discardedBytes());
+        assertEquals(n, got.size());
+        for (int i = 0; i < n; i += 97) {
+            assertEquals(i % 100, got.get(i).chunkX(), "order preserved at " + i);
+            assertEquals(40 + (i % 50), got.get(i).topAt(3, 3));
+        }
+        o2.log().close();
+    }
+
+    @Test
+    void aDamagedHugeLengthFieldEndsTheReplayAsADiscardedTailWithoutAllocatingIt() throws Exception {
+        Path f = Files.createTempDirectory("hf-test").resolve("len.hfl");
+        MaterialPalette pal = new MaterialPalette();
+        int stone = pal.idOf("minecraft:stone");
+        TileLog.Opened o = TileLog.open(f, "fp-len", pal, t -> { });
+        o.log().append(TestUtil.flat(0, 0, 64, stone));
+        o.log().close();
+        long good = Files.size(f);
+        // a record header claiming ~2 GiB, then a little data: must stop and discard, not try to allocate or read it
+        Files.write(f, new byte[]{1, 0x7F, (byte) 0xFF, (byte) 0xFF, (byte) 0xF0, 9, 9, 9, 9, 9, 9, 9, 9, 9}, StandardOpenOption.APPEND);
+
+        List<ColumnTile> got = new ArrayList<>();
+        TileLog.Opened o2 = TileLog.open(f, "fp-len", new MaterialPalette(), got::add);
+        assertFalse(o2.report().freshStart());
+        assertEquals(1, o2.report().tiles());
+        assertEquals(14, o2.report().discardedBytes());
+        o2.log().close();
+        assertEquals(good, Files.size(f), "the damaged tail is truncated away");
+    }
+
+    @Test
+    void aRealIoErrorIsNotMistakenForAnUnreadableHeaderAndDoesNotTruncateTheLog() throws Exception {
+        Path dir = Files.createTempDirectory("hf-test");
+        Path f = dir.resolve("io.hfl");
+        MaterialPalette pal = new MaterialPalette();
+        int stone = pal.idOf("minecraft:stone");
+        TileLog.Opened o = TileLog.open(f, "fp-io", pal, t -> { });
+        o.log().append(TestUtil.flat(0, 0, 64, stone));
+        o.log().close();
+        long before = Files.size(f);
+        // a directory where the file should be cannot be opened for reading as a file: the error must surface, and nothing may be rewritten
+        Path asDir = dir.resolve("dir.hfl");
+        Files.createDirectory(asDir);
+        assertThrows(java.io.IOException.class, () -> TileLog.open(asDir, "fp-io", new MaterialPalette(), t -> { }));
+        assertTrue(Files.isDirectory(asDir));
+        assertEquals(before, Files.size(f));
+    }
 }

@@ -312,4 +312,40 @@ class StreamLoopTest {
         for (int i = 0; i < 600; i++) step(s, 0, 0, 0);                    // good tiles still flow afterwards
         assertTrue(client.tileCount() > 0, "good tiles must still be accepted after a corrupt one");
     }
+
+    private long sumHeldBytes() {
+        long sum = 0;
+        for (TileKey k : client.tileKeys()) sum += client.tile(k).decoded().length;
+        return sum;
+    }
+
+    @Test void theClientStoreByteBudgetEvictsLeastRecentlyUsedAndTheCountedTotalStaysExact() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        PlayerStreamer s = streamer(cfg(300, 4096));
+        client.setMaxStoreBytes(lim.maxDecodedTileBytes());                       // the smallest legal budget: 64 KiB
+        for (int i = 0; i < 400; i++) { step(s, 0, 0, 0); assertEquals(sumHeldBytes(), client.storeBytes(), "counted total == real total at tick " + i); }
+        assertTrue(client.storeBytes() <= client.maxStoreBytes(), "within budget: " + client.storeBytes());
+        assertTrue(client.tileCount() > 0, "something is still held");
+        assertTrue(cc.get("client.tile.evicted.bytes") > 0, "the budget really forced evictions (premise)");
+        assertTrue(client.tileCount() < s.plan().leaves().size(), "so not every tile fits");
+    }
+
+    @Test void theByteTotalStaysExactThroughCountEvictionDropsAndReplacementsWithTheDefaultBudget() {
+        SyntheticTerrain.fill(store, -48, -48, 47, 47, SEED);
+        Limits small = lim.withClientTileCache(40);                               // count eviction path
+        ClientSession c2 = new ClientSession(small, new Counters(), "t", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX);
+        ServerSession srv2 = new ServerSession(small, clock::get, new Counters(), 78);
+        c2.setPayloadValidator(TerrainPayloads.TERRAIN);
+        for (byte[] r : srv2.onFrame(c2.start())) for (byte[] b : c2.onFrame(r)) srv2.onFrame(b);
+        PlayerStreamer s2 = new PlayerStreamer(srv2, store, palette, new LodPlanner(model), cfg(300, 4096), MSB, LSB, DIM, clock::get);
+        for (int i = 0; i < 300; i++) {
+            clock.addAndGet(50_000_000L);
+            for (byte[] f : s2.tick(0, 0, 0)) for (byte[] r : c2.onFrame(f)) for (byte[] back : srv2.onFrame(r)) c2.onFrame(back);
+            long real = 0; for (TileKey k : c2.tileKeys()) real += c2.tile(k).decoded().length;
+            assertEquals(real, c2.storeBytes(), "total stays exact at tick " + i);
+        }
+        assertEquals(40, c2.tileCount(), "the count cap held (premise)");
+        assertTrue(c2.storeBytes() > 0 && c2.storeBytes() <= ClientSession.DEFAULT_MAX_STORE_BYTES);
+        assertThrows(IllegalArgumentException.class, () -> c2.setMaxStoreBytes(small.maxDecodedTileBytes() - 1L));
+    }
 }

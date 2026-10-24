@@ -70,13 +70,50 @@ public final class TileLog implements AutoCloseable {
     /** Result holder for open(). */
     public record Opened(TileLog log, LoadReport report) { }
 
+    /** A tile or palette record larger than this is treated as corruption (real records are a few KB): bounds the memory a damaged length field can cost. */
+    static final int MAX_RECORD_BYTES = 16 * 1024 * 1024;
+
+    /** Positional reader with a 64 KiB read-ahead window; wraps real I/O errors in UncheckedIOException (see open). */
+    private static final class ReadAhead {
+        private final FileChannel ch;
+        private final long size;
+        private final byte[] buf = new byte[1 << 16];
+        private long bufStart = -1;
+        private int bufLen;
+
+        ReadAhead(FileChannel ch, long size) { this.ch = ch; this.size = size; }
+
+        /** Exactly {@code n} bytes at {@code pos} into {@code dst}; false when the file ends first. */
+        boolean read(long pos, byte[] dst, int n) {
+            if (pos + n > size) return false;
+            int off = 0;
+            try {
+                while (off < n) {
+                    long at = pos + off;
+                    if (bufStart < 0 || at < bufStart || at >= bufStart + bufLen) {
+                        bufStart = at;
+                        int r = ch.read(ByteBuffer.wrap(buf), at);
+                        if (r <= 0) { bufStart = -1; bufLen = 0; return false; }
+                        bufLen = r;
+                    }
+                    int from = (int) (at - bufStart), c = Math.min(n - off, bufLen - from);
+                    System.arraycopy(buf, from, dst, off, c);
+                    off += c;
+                }
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            return true;
+        }
+    }
+
     public static Opened open(Path file, String fingerprint, MaterialPalette palette, Consumer<ColumnTile> sink) throws IOException {
         if (file.getParent() != null) Files.createDirectories(file.getParent());
         Files.deleteIfExists(tmpPath(file));     // leftover of a compaction that crashed before the atomic swap: the log itself is intact
         HashSet<Long> keys = new HashSet<>();
         boolean fresh = !Files.exists(file);
         String reason = fresh ? "no cache file" : null;
-        byte[] data = fresh ? new byte[0] : Files.readAllBytes(file);
+        long size = fresh ? 0 : Files.size(file);
         int tiles = 0;
         long goodEnd = 0;
         if (!fresh && palette.size() != 1) {
@@ -84,46 +121,56 @@ public final class TileLog implements AutoCloseable {
             throw new IllegalArgumentException("replaying an existing log requires a brand-new MaterialPalette (one palette per log)");
         }
         if (!fresh) {
-            try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
-                byte[] m = new byte[4];
-                in.readFully(m);
-                int ver = in.readInt();
-                String fp = in.readUTF();
-                if (!java.util.Arrays.equals(m, MAGIC) || ver != FORMAT_VERSION || !fp.equals(fingerprint)) {
-                    fresh = true;
-                    reason = "header/fingerprint mismatch";
-                } else {
-                    goodEnd = 4 + 4 + 2 + fp.getBytes(StandardCharsets.UTF_8).length;
-                    int pos = (int) goodEnd;
-                    while (pos + 5 <= data.length) {
-                        byte type = data[pos];
-                        int len = ((data[pos + 1] & 0xFF) << 24) | ((data[pos + 2] & 0xFF) << 16) | ((data[pos + 3] & 0xFF) << 8) | (data[pos + 4] & 0xFF);
-                        if (len < 0 || pos + 5 + len + 4 > data.length) break;
-                        CRC32 crc = new CRC32();
-                        crc.update(data, pos, 5 + len);
-                        int stored = ((data[pos + 5 + len] & 0xFF) << 24) | ((data[pos + 6 + len] & 0xFF) << 16)
-                                | ((data[pos + 7 + len] & 0xFF) << 8) | (data[pos + 8 + len] & 0xFF);
-                        if ((int) crc.getValue() != stored) break;
-                        byte[] payload = java.util.Arrays.copyOfRange(data, pos + 5, pos + 5 + len);
-                        if (type == T_PALETTE) {
-                            DataInputStream p = new DataInputStream(new ByteArrayInputStream(payload));
-                            palette.restore(p.readShort(), p.readUTF());
-                        } else if (type == T_TILE) {
-                            ColumnTile ct = decodeTile(payload);
-                            keys.add(HeightPyramid.key(ct.chunkX(), ct.chunkZ()));
-                            sink.accept(ct);
-                            tiles++;
+            // Streamed replay: memory is one record plus a 64 KiB read-ahead window, never the whole file. Real I/O errors travel as
+            // UncheckedIOException so they are NOT mistaken for "unreadable header" (which would truncate a healthy log).
+            try (FileChannel rc = FileChannel.open(file, StandardOpenOption.READ)) {
+                try (DataInputStream in = new DataInputStream(java.nio.channels.Channels.newInputStream(rc))) {   // unbuffered: the channel position stays at the header end
+                    byte[] m = new byte[4];
+                    in.readFully(m);
+                    int ver = in.readInt();
+                    String fp = in.readUTF();
+                    if (!java.util.Arrays.equals(m, MAGIC) || ver != FORMAT_VERSION || !fp.equals(fingerprint)) {
+                        fresh = true;
+                        reason = "header/fingerprint mismatch";
+                    } else {
+                        goodEnd = 4 + 4 + 2 + fp.getBytes(StandardCharsets.UTF_8).length;
+                        ReadAhead ra = new ReadAhead(rc, size);
+                        long pos = goodEnd;
+                        byte[] head = new byte[5], tail = new byte[4];
+                        while (pos + 5 <= size) {
+                            if (!ra.read(pos, head, 5)) break;
+                            byte type = head[0];
+                            int len = ((head[1] & 0xFF) << 24) | ((head[2] & 0xFF) << 16) | ((head[3] & 0xFF) << 8) | (head[4] & 0xFF);
+                            if (len < 0 || len > MAX_RECORD_BYTES || pos + 5 + len + 4 > size) break;   // corrupt length: stop here, the tail is discarded
+                            byte[] payload = new byte[len];
+                            if (!ra.read(pos + 5, payload, len) || !ra.read(pos + 5 + len, tail, 4)) break;
+                            CRC32 crc = new CRC32();
+                            crc.update(head, 0, 5);
+                            crc.update(payload, 0, len);
+                            int stored = ((tail[0] & 0xFF) << 24) | ((tail[1] & 0xFF) << 16) | ((tail[2] & 0xFF) << 8) | (tail[3] & 0xFF);
+                            if ((int) crc.getValue() != stored) break;
+                            if (type == T_PALETTE) {
+                                DataInputStream p = new DataInputStream(new ByteArrayInputStream(payload));
+                                palette.restore(p.readShort(), p.readUTF());
+                            } else if (type == T_TILE) {
+                                ColumnTile ct = decodeTile(payload);
+                                keys.add(HeightPyramid.key(ct.chunkX(), ct.chunkZ()));
+                                sink.accept(ct);
+                                tiles++;
+                            }
+                            pos += 5 + len + 4;
+                            goodEnd = pos;
                         }
-                        pos += 5 + len + 4;
-                        goodEnd = pos;
                     }
                 }
+            } catch (java.io.UncheckedIOException real) {
+                throw real.getCause();
             } catch (IOException eof) {
                 fresh = true;
                 reason = "unreadable header";
             }
         }
-        long discarded = fresh ? data.length : data.length - goodEnd;
+        long discarded = fresh ? size : size - goodEnd;
         FileChannel ch = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.READ);
         if (fresh) {
             ch.truncate(0);

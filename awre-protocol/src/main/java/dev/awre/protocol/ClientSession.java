@@ -20,6 +20,11 @@ public final class ClientSession {
     private final String modVersion;
     private final int minVersion, maxVersion;
     private final Map<TileKey, Received> store;
+    /** Total decoded bytes held in {@link #store}, kept exact at every mutation (add, replace, count-eviction, byte-eviction, drop). */
+    private long storeBytes;
+    /** Default byte budget of the client tile store: decoded payload bytes, in addition to the tile-count cap. */
+    public static final long DEFAULT_MAX_STORE_BYTES = 256L * 1024 * 1024;
+    private long maxStoreBytes = DEFAULT_MAX_STORE_BYTES;
     private final Reassembler reassembler;
     private record PaletteKey(long msb, long lsb, String dimension) { }
     private final Map<PaletteKey, List<String>> palettes = new LinkedHashMap<>(8, 0.75f, true) {
@@ -45,8 +50,41 @@ public final class ClientSession {
         this.reassembler = new Reassembler(counters);
         final int cap = lim.clientTileCache();
         this.store = new LinkedHashMap<>(16, 0.75f, true) {
-            @Override protected boolean removeEldestEntry(Map.Entry<TileKey, Received> e) { return size() > cap; }
+            @Override protected boolean removeEldestEntry(Map.Entry<TileKey, Received> e) {
+                if (size() <= cap) return false;
+                storeBytes -= e.getValue().decoded().length;                 // being evicted by count: keep the byte total exact
+                return true;
+            }
         };
+    }
+
+    /** Sets the byte budget (decoded payload bytes) of the tile store; must fit at least one maximum-size tile. Least recently used tiles are evicted to stay within it. */
+    public synchronized void setMaxStoreBytes(long bytes) {
+        if (bytes < lim.maxDecodedTileBytes()) throw new IllegalArgumentException("store byte budget " + bytes + " is smaller than one maximum tile (" + lim.maxDecodedTileBytes() + ")");
+        this.maxStoreBytes = bytes;
+        evictToBudget(null);
+    }
+
+    public synchronized long storeBytes() { return storeBytes; }
+    public synchronized long maxStoreBytes() { return maxStoreBytes; }
+
+    private void putTile(TileKey key, Received rec) {
+        Received prev = store.put(key, rec);                                 // may evict the eldest by count (accounted in removeEldestEntry)
+        if (prev != null) storeBytes -= prev.decoded().length;
+        storeBytes += rec.decoded().length;
+        evictToBudget(key);
+    }
+
+    /** Evicts least-recently-used tiles (never {@code keep}) until the byte total fits the budget. */
+    private void evictToBudget(TileKey keep) {
+        if (storeBytes <= maxStoreBytes) return;
+        for (java.util.Iterator<Map.Entry<TileKey, Received>> it = store.entrySet().iterator(); it.hasNext() && storeBytes > maxStoreBytes; ) {
+            Map.Entry<TileKey, Received> e = it.next();
+            if (e.getKey().equals(keep)) continue;
+            storeBytes -= e.getValue().decoded().length;
+            it.remove();
+            counters.inc("client.tile.evicted.bytes");
+        }
     }
 
     private byte[] helloFrame() {
@@ -163,7 +201,8 @@ public final class ClientSession {
         if ((negotiatedCaps & Awre.CAP_DROP_V1) == 0) throw new ProtocolException(Reason.UNKNOWN_TYPE, "DROP without negotiated capability");
         TileDrop d = TileDrop.decode(f.body(), lim);
         for (TileDrop.Key k : d.keys()) {
-            if (store.remove(new TileKey(d.worldMsb(), d.worldLsb(), d.dimension(), k.tileX(), k.tileZ(), k.lod())) != null) counters.inc("client.tile.dropped");
+            Received gone = store.remove(new TileKey(d.worldMsb(), d.worldLsb(), d.dimension(), k.tileX(), k.tileZ(), k.lod()));
+            if (gone != null) { storeBytes -= gone.decoded().length; counters.inc("client.tile.dropped"); }
         }
         return List.of();
     }
@@ -196,7 +235,7 @@ public final class ClientSession {
                 Received old = store.get(key);
                 if (old != null && tm.revision() < old.revision()) { status = TileAck.Status.STALE; counters.inc("client.tile.stale"); }
                 else if (old != null && tm.revision() == old.revision()) { status = TileAck.Status.DUPLICATE; counters.inc("client.tile.duplicate"); }
-                else { store.put(key, new Received(tm.revision(), tm.provenance(), decoded)); lastTile = key; status = TileAck.Status.OK; counters.inc("client.tile.accepted"); }
+                else { putTile(key, new Received(tm.revision(), tm.provenance(), decoded)); lastTile = key; status = TileAck.Status.OK; counters.inc("client.tile.accepted"); }
             }
         } catch (ProtocolException e) {
             strike(e);
