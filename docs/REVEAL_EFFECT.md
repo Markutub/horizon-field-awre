@@ -25,6 +25,7 @@ vanilla chunk rendering and would conflict with Sodium/Iris; not attempted).
 `ModelOffset` = tile origin minus camera (applied by the shader itself; see "Open question" below). `ColorModulator` = (wave origin x, z relative to camera, `revealAge` s, `tileAge` s). `TextureMat` column-major = parameters: col 0 (speed, maxDelay, duration, peak), col 1 (depth, emerge, greyPeak, rippleAmp), col 2 (rippleCycles). `revealAge`/`tileAge` = 10000 means finished (no offset, no grey, nothing hidden).
 
 ## Tuning (no rebuild)
+Easiest: create `config/awre-reveal.txt` (one `key = value` per line, `#` comments; keys: enabled, speed, maxDelay, duration, peak, depth, emerge, greyPeak, rippleAmp, rippleCycles; the commented example is `RevealSettings.EXAMPLE`). Bad lines are skipped with a warning; JVM properties override the file.
 System properties on the client JVM: `-Dawre.reveal=off` disables the effect; `-Dawre.reveal.<speed|maxDelay|duration|peak|depth|emerge|greyPeak|rippleAmp|rippleCycles>=N` override defaults
 (defaults: speed 120, maxDelay 6, duration 1.6, peak 6, depth 10, emerge 0.3, greyPeak 0.85, rippleAmp 1.2, rippleCycles 2). An out-of-range set is rejected as a whole and the defaults are used (warning logged).
 Preview a setting offline: `JAVA_TOOL_OPTIONS="-Dawre.reveal.speed=200 -Dawre.reveal.peak=10" bash tools/preview/run-reveal-preview.sh out/` then open `out/reveal-overhead.gif` and `out/reveal-sheet-overhead.png`.

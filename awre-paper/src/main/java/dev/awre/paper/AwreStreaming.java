@@ -157,7 +157,7 @@ final class AwreStreaming {
         AwreWorldTerrain t = terrainFor(w);
         StreamConfig sc = new StreamConfig(c.streamRadius(), c.streamBytesPerSecond(), 65_536, 0.1, c.streamMaxHeldTiles(), 16, 256, 3);
         entries.put(p.getUniqueId(), new Entry(new PlayerStreamer(s, t.store, t.palette, new LodPlanner(model), sc,
-                wid.getMostSignificantBits(), wid.getLeastSignificantBits(), dim, System::nanoTime), wid));
+                wid.getMostSignificantBits(), wid.getLeastSignificantBits(), dim, System::nanoTime, retryCooldownNanos()), wid));
         plugin.getLogger().info("[AWRE] stream attached: " + p.getName() + " radius=" + (int) c.streamRadius() + " source=" + (c.streamCaptured() ? "captured" : "synthetic"));
     }
 
@@ -168,6 +168,18 @@ final class AwreStreaming {
     /** Chunks held by the terrain this player streams from (0 if not attached). */
     /** Approximate heap held by the observed chunks of the player's world (see TerrainStore#approxChunkBytes). */
     long terrainChunkBytes(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.approxChunkBytes(); }
+
+    private long retryCooldownNanos = -1;
+
+    /** {@code stream.retry-cooldown-seconds} (5..3600, default 60) as nanoseconds: how long a tile that a client keeps failing is held back before one more attempt (doubling, up to 16x). Read once. */
+    private long retryCooldownNanos() {
+        if (retryCooldownNanos < 0) {
+            int sec = plugin.getConfig().getInt("stream.retry-cooldown-seconds", 60);
+            if (sec < 5 || sec > 3600) { plugin.getLogger().warning("[AWRE] stream.retry-cooldown-seconds must be 5..3600; using 60"); sec = 60; }
+            retryCooldownNanos = sec * 1_000_000_000L;
+        }
+        return retryCooldownNanos;
+    }
 
     /** Sets the observed-chunk cap of a new world store from {@code stream.max-store-mib} (invalid values fall back to automatic) and logs the result. */
     private void applyStoreBudget(TerrainStore store, String world) {

@@ -44,6 +44,7 @@ public final class AwreClientMod implements ClientModInitializer {
         boolean renderEnabled = decision.renderEnabled();
         loadColorOverrides();
         loadBiomeOverrides();
+        loadRevealSettings();
         shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
         renderer.setShaderBridge(shaderBridge, "assign".equalsIgnoreCase(System.getProperty("awre.iris", "auto")));
 
@@ -107,6 +108,20 @@ public final class AwreClientMod implements ClientModInitializer {
             dev.horizonfield.core.terrain.BlockColors.setOverrides(o);
             LOG.info("[AWRE] colour overrides: {} rules from {}", o.size(), f.getFileName());
             for (String r : o.rejected()) LOG.warn("[AWRE] awre-colors.txt {}", r);
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("[AWRE] could not read {}: {}", f.getFileName(), e.toString());
+        }
+    }
+
+    /** config/awre-reveal.txt: effect settings (see RevealSettings); JVM properties still override it. Missing file = defaults. */
+    private static void loadRevealSettings() {
+        java.nio.file.Path f = FabricLoader.getInstance().getConfigDir().resolve("awre-reveal.txt");
+        if (!java.nio.file.Files.isRegularFile(f)) return;
+        try {
+            var parsed = dev.awre.stream.RevealSettings.parse(java.nio.file.Files.readAllLines(f));
+            dev.awre.stream.RevealSettings.setFileValues(parsed.values());
+            LOG.info("[AWRE] reveal settings: {} value(s) from {}", parsed.values().size(), f.getFileName());
+            for (String r : parsed.rejected()) LOG.warn("[AWRE] awre-reveal.txt {}", r);
         } catch (java.io.IOException | RuntimeException e) {
             LOG.warn("[AWRE] could not read {}: {}", f.getFileName(), e.toString());
         }

@@ -101,6 +101,12 @@ Base: the Session 36 tree (snapshot `horizon-field-awre-g1_2.zip` + `awre-sessio
 - **Run here:** core 115 (+4 `TerrainStoreCapTest`), stream 107 (+3 `StoreBudgetTest`, +1 ingest/persistence test), protocol 67; mutation check (removing the guard fails 4 tests); `-Xlint:all` clean; Paper/Fabric syntax check; `config.yml` parses. **NOT run:** Gradle build, a real server hitting the cap, the real bytes/chunk on real terrain (450 B is a synthetic estimate; the auto budget and chunk estimate need measurement with `docs/MEASUREMENT_PLAN.md`).
 - Behaviour to know: when full, replay of an existing cache keeps the first chunks in file order and refuses the rest (a bigger budget or a fresh cache is the remedy); the version index is counted inside the 450 B estimate, the tile cache (20 000 entries) is not.
 
+## Session 38 (user-facing settings and guide; sandbox, pure Java; Fabric/Paper wiring syntax-checked only)
+- **`config/awre-reveal.txt`** (client): reveal settings without JVM flags, parsed by the new pure-Java `RevealSettings` (tested: comments, bad lines with line numbers, precedence JVM property > file > defaults, the shipped example equals the real defaults). Found and fixed an ordering bug while wiring it: `HorizonRenderer` is constructed before `onInitializeClient` reads config files, so the animator is now created on first use.
+- **`stream.retry-cooldown-seconds`** (server, 5..3600, default 60): the blacklist cooldown from Session 27 is now a config key.
+- **`docs/USER_GUIDE.md`** (draft): first-run behaviour (only already-loaded chunks are captured), config keys, log lines, tested/not-verified matrix, known limits, troubleshooting.
+- **Run here:** core 115, protocol 67, stream 112 (+5 `RevealSettingsTest`); `config.yml` parses; syntax check of Paper/Fabric sources. **NOT run:** Gradle build, reading `config/awre-reveal.txt` in a real client, the cooldown key on a real server.
+
 Next tasks (acceptance criteria):
 1. **Fresh builds (P0).** On a machine with network: `gradle build -PjavaRelease=21 --stacktrace` and `gradle -p awre-fabric build --stacktrace` on this tree. Accept: both exit 0, jars produced, logs kept; any compile errors fixed minimally and re-run.
 2. **Render smoke gate (P0).** Run the `integration` job via workflow_dispatch with `render_smoke=true` on the CI runner. Accept: `G3 render smoke` PASS in the summary on 3 consecutive runs before it is ever made default.

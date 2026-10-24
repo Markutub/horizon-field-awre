@@ -83,14 +83,24 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
     private HorizonDrawPlanner<GpuMesh> planner;
     private long drawErrors;
 
-    // reveal effect: -Dawre.reveal=off disables it; awre.reveal.<speed|maxDelay|duration|peak|depth|emerge|greyPeak|rippleAmp|rippleCycles> tune it
-    private final dev.awre.stream.RevealAnimator animator = new dev.awre.stream.RevealAnimator(
-            dev.awre.stream.RevealAnimator.Params.fromProperties(System::getProperty, m -> LOG.warn("[AWRE] reveal: {}", m)),
-            !"off".equalsIgnoreCase(System.getProperty("awre.reveal", "on")));
-    private final Matrix4f revealParams = new Matrix4f().set(animator.params().toUniform());
+    // reveal effect settings: config/awre-reveal.txt, overridden by JVM properties (-Dawre.reveal=off, -Dawre.reveal.<key>=...); see RevealSettings.
+    // Created on first use, NOT at construction: this renderer is built before the mod has read its config files.
+    private dev.awre.stream.RevealAnimator animator;
+    private Matrix4f revealParams;
+
+    private void ensureReveal() {
+        if (animator != null) return;
+        var get = dev.awre.stream.RevealSettings.provider(System::getProperty);
+        animator = new dev.awre.stream.RevealAnimator(
+                dev.awre.stream.RevealAnimator.Params.fromProperties(get, m -> LOG.warn("[AWRE] reveal: {}", m)),
+                dev.awre.stream.RevealSettings.enabled(get));
+        revealParams = new Matrix4f().set(animator.params().toUniform());
+    }
+
     private boolean revealBroken, revealLogged, revealThisFrame;
 
     void setPlanner(HorizonDrawPlanner<GpuMesh> p) {
+        ensureReveal();
         this.planner = p;
         if (p != null) p.setReveal(animator);                  // release() on dimension change / disconnect / shutdown resets the session
     }
@@ -210,6 +220,7 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
      * @param camX/Y/Z   camera position in world coordinates
      */
     void render(Matrix4f viewMatrix, double camX, double camY, double camZ) {
+        ensureReveal();
         HorizonDrawPlanner<GpuMesh> p = planner;
         if (p == null) return;
         List<HorizonDrawPlanner.Draw<GpuMesh>> draws = p.frame(camX, camY, camZ);   // bounded uploads happen in here
