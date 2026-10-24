@@ -138,4 +138,30 @@ class ChunkIngestTest {
             assertTrue(p2.fileCreated());
         }
     }
+
+    @Test void aFullStoreRefusesNewChunksAndDoesNotPersistThemKeepsUpdatingHeldOnes() throws Exception {
+        java.nio.file.Path file = java.nio.file.Files.createTempDirectory("hf-cap").resolve("cap.hfl");
+        TerrainStore store = new TerrainStore(3, TerrainStore.Reduce.MEAN, 100);
+        store.setMaxChunks(5);
+        MaterialPalette pal = new MaterialPalette();
+        Metrics m = new Metrics();
+        TerrainPersistence persistence = TerrainPersistence.open(file, "fp-cap", store, pal, m);
+        try (ChunkIngest in = new ChunkIngest(store, pal, 256, 1, m, t -> { }, persistence)) {
+            for (int x = 0; x < 20; x++) in.submit(view(x, 0, 3, false), x);
+            assertTrue(waitUntil(() -> m.get("ingest.stored") + m.get("ingest.store.full") == 20, 5000), "all 20 processed");
+            assertEquals(5, store.chunkCount());
+            assertEquals(5, m.get("ingest.stored"));
+            assertEquals(15, m.get("ingest.store.full"));
+            assertEquals(15, store.rejectedChunks());
+            long held = store.version(new LodKey(0, 0, 0));
+            in.submit(view(0, 0, 3, true), 0);                                 // an edit of a chunk that IS held still goes through
+            assertTrue(waitUntil(() -> store.version(new LodKey(0, 0, 0)) > held, 3000), "update accepted at the cap");
+        }
+        MaterialPalette pal2 = new MaterialPalette();
+        TerrainStore replay = new TerrainStore(3, TerrainStore.Reduce.MEAN, 100);
+        try (TerrainPersistence again = TerrainPersistence.open(file, "fp-cap", replay, pal2, new Metrics())) {
+            assertEquals(5, replay.chunkCount(), "only held chunks were persisted: the log has no tiles the store refused");
+            assertEquals(0, again.report().discardedBytes());
+        }
+    }
 }

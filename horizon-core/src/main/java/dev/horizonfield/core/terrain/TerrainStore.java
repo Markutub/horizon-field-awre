@@ -32,6 +32,8 @@ public final class TerrainStore {
     private final Map<Long, ColumnTile> chunks = new ConcurrentHashMap<>();
     private final Map<LodKey, Long> versions = new ConcurrentHashMap<>();
     private final AtomicLong clock = new AtomicLong(0);
+    private final AtomicLong rejected = new AtomicLong();       // new chunks refused because the store was full (see setMaxChunks)
+    private volatile int maxChunks = Integer.MAX_VALUE;
     private final AtomicLong columnBytes = new AtomicLong();   // approx heap held by the observed chunks (see ColumnTile#approxHeapBytes)
     private final Map<LodKey, Cached> cache;
 
@@ -45,11 +47,27 @@ public final class TerrainStore {
 
     private static long ck(int cx, int cz) { return ((long) cx << 32) | (cz & 0xFFFFFFFFL); }
 
-    /** @return the new version, or the existing one if the content is identical */
+    /** Measured whole-store heap per observed chunk (chunk summary + version index), synthetic terrain: 406-433 B; rounded up. An estimate for budgeting only. */
+    public static final int BYTES_PER_CHUNK_ESTIMATE = 450;
+
+    /**
+     * Hard cap on the number of observed chunks (default: unlimited). When full, a chunk at a NEW coordinate is refused ({@link #put} returns 0 and
+     * {@link #rejectedChunks()} counts it); chunks already stored still update normally, so nothing that is held is ever dropped. The cap is checked
+     * without a lock, so concurrent writers may overshoot it by at most the number of writer threads.
+     */
+    public void setMaxChunks(int max) {
+        if (max < 1) throw new IllegalArgumentException("maxChunks " + max);
+        this.maxChunks = max;
+    }
+    public int maxChunks() { return maxChunks; }
+    public long rejectedChunks() { return rejected.get(); }
+
+    /** @return the new version, the existing one if the content is identical, or 0 if the chunk is new and the store is full (nothing stored) */
     public long put(ColumnTile t) {
         long k = ck(t.chunkX(), t.chunkZ());
         ColumnTile old = chunks.get(k);
         if (old != null && old.sameContent(t)) return versions.get(new LodKey(0, t.chunkX(), t.chunkZ()));
+        if (old == null && chunks.size() >= maxChunks) { rejected.incrementAndGet(); return 0; }
         long v = clock.incrementAndGet();
         ColumnTile prev = chunks.put(k, t);
         columnBytes.addAndGet(t.approxHeapBytes() - (prev == null ? 0 : prev.approxHeapBytes()));

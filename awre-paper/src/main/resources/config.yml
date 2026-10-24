@@ -20,6 +20,7 @@ stream:
   compact-garbage-ratio: 0.5      # 0.1..0.95: rewrite a world's cache file when this share of its tile records is superseded (checked every 30 s)
   compact-min-bytes: 1048576      # ...and the file is at least this big (0 = size does not matter)
   revalidate-seconds: 600         # 0..86400, captured mode: re-observe every loaded chunk this often (0 = only on load and on block events). Catches WorldEdit, fluids, other plugins. Main-thread cost: one ChunkSnapshot per chunk at <= 2 per tick within a 0.5 ms budget (NOT yet measured on a real server)
+  max-store-mib: 0                # 0..65536, memory budget for observed terrain PER WORLD (about 450 bytes per chunk). 0 = automatic: min(512 MiB, 1/8 of the max heap). When full, chunks at NEW coordinates are not captured (stored ones keep updating); a warning is logged.
 limits:
   max-frame-bytes: 16384          # per message; hard ceiling 32000 (one plugin message, no fragmentation in G0)
   max-decoded-tile-bytes: 65536   # per tile after inflate

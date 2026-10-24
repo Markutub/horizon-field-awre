@@ -42,6 +42,7 @@ final class AwreStreaming {
     }
 
     private final JavaPlugin plugin;
+    private boolean storeFullWarned;
     private final AwreChannel channel;
     private final LodModel model = LodModel.defaults();
     private final Metrics metrics = new Metrics();
@@ -99,6 +100,7 @@ final class AwreStreaming {
             existing = terrains.get(key);
             if (existing != null) return existing;
             TerrainStore store = new TerrainStore(model.maxLod(), TerrainStore.Reduce.MEAN, 20_000);
+            applyStoreBudget(store, w.getName());
             AwreWorldTerrain t;
             if (c.streamCaptured()) {
                 final AwreWorldTerrain ct = new AwreWorldTerrain(store, new MaterialPalette(), w.getMinHeight(), w.getMaxHeight() - 1);
@@ -167,19 +169,39 @@ final class AwreStreaming {
     /** Approximate heap held by the observed chunks of the player's world (see TerrainStore#approxChunkBytes). */
     long terrainChunkBytes(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.approxChunkBytes(); }
 
+    /** Sets the observed-chunk cap of a new world store from {@code stream.max-store-mib} (invalid values fall back to automatic) and logs the result. */
+    private void applyStoreBudget(TerrainStore store, String world) {
+        int mib = plugin.getConfig().getInt("stream.max-store-mib", 0);
+        dev.awre.stream.StoreBudget.Resolved r;
+        try { r = dev.awre.stream.StoreBudget.resolve(mib, Runtime.getRuntime().maxMemory()); }
+        catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("[AWRE] " + e.getMessage() + "; using automatic");
+            r = dev.awre.stream.StoreBudget.resolve(0, Runtime.getRuntime().maxMemory());
+        }
+        store.setMaxChunks(r.maxChunks());
+        plugin.getLogger().info("[AWRE] terrain store cap for '" + world + "': " + r.maxChunks() + " chunks (~" + (r.budgetBytes() >> 20) + " MiB, " + (r.auto() ? "automatic" : "configured") + ")");
+    }
+
+    /** Total chunks refused because a world's terrain store was full (0 = the cap was never hit). */
+    long storeRejected() { long n = 0; for (AwreWorldTerrain t : terrains.values()) n += t.store.rejectedChunks(); return n; }
+
     /** Capture backlog (requested / handled / retried / waiting / queued / peak waiting), or null when capture is off. */
     String captureStats() {
         AwreCapture c = capture;
         if (c == null) return null;
         var st = c.stats();
-        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting() + " " + c.timingStats();
+        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting() + " " + c.timingStats() + " storeRejected=" + storeRejected();
     }
 
     int terrainChunks(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.chunkCount(); }
 
     private void tickAll() {
         boolean log = ++rounds % 50 == 0;                       // every 5 s
-        if (rounds % 600 == 0) { String cs = captureStats(); if (cs != null) plugin.getLogger().info("[AWRE] " + cs); }   // once a minute
+        if (rounds % 600 == 0) {
+            String cs = captureStats(); if (cs != null) plugin.getLogger().info("[AWRE] " + cs);
+            long full = storeRejected();
+            if (full > 0 && !storeFullWarned) { storeFullWarned = true; plugin.getLogger().warning("[AWRE] terrain store is full: " + full + " chunk(s) at new coordinates were not captured. Raise stream.max-store-mib (or give the server more heap) to capture more distant terrain; stored chunks keep updating."); }
+        }   // once a minute
         for (Map.Entry<UUID, Entry> me : entries.entrySet()) {
             Player p = Bukkit.getPlayer(me.getKey());
             Entry e = me.getValue();

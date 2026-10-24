@@ -38,7 +38,7 @@ public final class ChunkIngest implements AutoCloseable {
         this.analyzer = new TerrainAnalyzer(palette);
         this.pool = new WorkerPool<>("AWRE-ingest", threads, queue, view -> {
             ColumnTile t = analyzer.analyze(view, Confidence.OBSERVED, System.currentTimeMillis());
-            store.put(t);
+            if (store.put(t) == 0) { metrics.inc("ingest.store.full"); return; }   // store at its cap: not held, so not persisted either
             if (persistence != null) persistence.persist(t);
             metrics.inc("ingest.stored");
         }, metrics, errorSink);
