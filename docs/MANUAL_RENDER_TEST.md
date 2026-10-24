@@ -1,5 +1,7 @@
 # Manual human-visible render test (Minecraft 1.21.11, Fabric, Paper 1.21.11)
 
+> **Continued in `docs/MANUAL_TEST_PLAN.md`** (checks 16-56: far plane, plain pipeline, seam/FOV/fog, biome tint, worldgen, Sodium/Iris/Bobby/VulkanMod, server/proxy, performance; switches, log lines, triage). Run THIS file's baseline (checks 1-15) first.
+
 **Result status: NOT VERIFIED.** Written 2026-10-22 (Session 27). No display was available; nothing below has been executed, and no
 screenshots exist. Headless counters (`tools/ci/render-gate.sh`) show the renderer *executed*; only this procedure can show the terrain *looks right*.
 

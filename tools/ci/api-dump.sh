@@ -41,6 +41,8 @@ dump blaze3d       '^com/mojang/blaze3d/.*\.class$'
 dump projection    '^net/minecraft/client/renderer/([a-z]+/)?[A-Za-z0-9_]*(Projection|Fog|DynamicUniforms|GameRenderer|LevelRenderer|RenderPipelines|Frustum|LevelTargetBundle)[A-Za-z0-9_$]*\.class$'
 dump camera        '^net/minecraft/client/(Camera|Minecraft|Options)\.class$'
 dump rendertypes   '^net/minecraft/client/renderer/(rendertype/)?(RenderType|RenderStateShard|RenderSetup|RenderTypes)[A-Za-z0-9_$]*\.class$'
+# world height accessors (per-dimension min/max build height, to replace the constant skirt floor -64) and the client level
+dump worldheight   '^net/minecraft/(world/level/(LevelHeightAccessor|Level|dimension/DimensionType)|client/multiplayer/ClientLevel)\.class$'
 
 # Vanilla shader SOURCES (assets are usually in the same jar or in a separate client jar): needed to check what core/position_color does
 # (e.g. whether it applies ModelOffset) and which names dynamictransforms.glsl / projection.glsl declare, which awre_terrain.vsh relies on.

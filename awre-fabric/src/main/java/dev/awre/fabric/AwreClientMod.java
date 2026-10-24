@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * Minecraft generation rewrites this file and HorizonRenderer, nothing else.
  *
  * <p>JVM properties: {@code -Dawre.render=auto|on|off} (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
- * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|assign} (auto = detect only; assign = EXPERIMENTAL: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
+ * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|assign} (auto = detect only; assign = EXPERIMENTAL: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.vanilla.radius=effective|client} (which render distance counts as vanilla's; client = raw option, for Bobby-like mods), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
  */
 public final class AwreClientMod implements ClientModInitializer {
     static final Logger LOG = LoggerFactory.getLogger("AWRE");
@@ -28,6 +28,7 @@ public final class AwreClientMod implements ClientModInitializer {
     private ClientRuntime<HorizonRenderer.GpuMesh> runtime;
     private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
     private boolean lastShaderActive;
+    private final dev.awre.stream.compat.VanillaRadius.Mode vanillaRadiusMode = dev.awre.stream.compat.VanillaRadius.Mode.parse(System.getProperty("awre.vanilla.radius", "effective"));
     private float lastDepthFar = -1;
     private int lastEffectiveRd = -1;
 
@@ -39,6 +40,7 @@ public final class AwreClientMod implements ClientModInitializer {
         var decision = dev.awre.stream.compat.RenderPolicy.decide(dev.awre.stream.compat.RenderPolicy.Mode.parse(System.getProperty("awre.render", "auto")),
                 id -> FabricLoader.getInstance().isModLoaded(id));
         decision.notes().forEach(LOG::info);
+        if (vanillaRadiusMode == dev.awre.stream.compat.VanillaRadius.Mode.CLIENT) LOG.info("[AWRE] awre.vanilla.radius=client: the raw client render distance is treated as vanilla's");
         boolean renderEnabled = decision.renderEnabled();
         loadColorOverrides();
         loadBiomeOverrides();
@@ -72,7 +74,8 @@ public final class AwreClientMod implements ClientModInitializer {
             }
             // The square vanilla really draws is limited by what the SERVER sends: Options#getEffectiveRenderDistance() is min(client option, server
             // view distance). The raw option (renderDistance().get()) hid ~450 tiles that vanilla was not drawing (G2 audit; signature from mc-api-dump).
-            double vanilla = client.options.getEffectiveRenderDistance() * 16.0;
+            // -Dawre.vanilla.radius=client uses the raw client option instead (for mods such as Bobby that draw real chunks out to it; see manual check 35)
+            double vanilla = dev.awre.stream.compat.VanillaRadius.chunks(vanillaRadiusMode, client.options.renderDistance().get(), client.options.getEffectiveRenderDistance()) * 16.0;
             float depthFar = client.gameRenderer.getDepthFar();       // diagnostic: tiles farther than the projection far plane are clipped by the hardware
             int effectiveRd = client.options.getEffectiveRenderDistance();
             // logged when EITHER changes: the first line is written in the main menu (no server distance yet); the in-world value is the one that matters

@@ -1,5 +1,18 @@
 # Project Status
 
+## Session 37 (CI coverage for the plain pipeline; Bobby lever)
+
+- `tools/ci/integration.sh` client D (`-Dawre.reveal=off`, `PLAIN_CHECK=0` skips): builds and draws the plain pipeline (own shader `awre_terrain_plain`) headlessly, which no CI client did before (A/B/C all use the reveal pipeline). Checks: handshake, `plain terrain pipeline in use`, no `reveal effect active`/`could not be created`, meshes, `submitted_draws>0`, stack-aware exception scan. It cannot judge placement (manual check 20). NOT run yet: first CI run will show whether the plain shader compiles.
+- `-Dawre.vanilla.radius=effective|client` (pure `VanillaRadius`, 3 tests; stream now 101): lever for manual check 35 (Bobby). Default unchanged.
+- Fabric side syntax-checked only.
+
+
+## Session 36 (manual test plan; docs only)
+
+- Added `docs/MANUAL_TEST_PLAN.md`: checks 16-56 continuing `MANUAL_RENDER_TEST.md` (1-15): far plane (needs a synthetic >2048-block setup, concrete coordinates), plain-pipeline placement, seam/FOV/fog, biome tint + worldgen, Sodium/Bobby/VulkanMod/Iris (no pack, 2 packs, experimental `assign`)/DH-Voxy, server/plugin/proxy/restart/incompatible client, performance; plus switch list, log-line cheat sheet, evidence list, report template, triage table, known-limitations list. NOT RUN.
+- Flagged a likely Bobby problem while writing it: AWRE's vanilla radius is the EFFECTIVE render distance (min of client and server), Bobby draws to the client's, so a band can double-draw (check 35; `COMPAT_PLAN.md` 2.2 corrected).
+- No code changed this session.
+
 ## Session 35 (CI run 40060623947 analysed; corrects Session 34)
 
 Evidence (artifacts `integration-logs`, `mc-api-dump`): all checks PASS. `far plane: vanilla=2048.0 awre=18534.4 (implied near 0.05)`; ~3.9M draws, 0 failures; reveal pipeline active. Dump: vanilla `position_color.vsh` has 0 uses of `ModelOffset`; `include/fog.glsl` content known (see COMPAT_PLAN 1.1).

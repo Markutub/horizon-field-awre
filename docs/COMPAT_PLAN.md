@@ -41,7 +41,7 @@ Known costs, by construction (not bugs):
 - Done when: G2 and G3 pass with Sodium loaded.
 
 ### 2.2 Bobby (client)
-- Design: Bobby turns cached chunks into real chunks inside the render-distance setting. AWRE already skips tiles fully inside `renderDistance * 16`, so the two meet at that border with no overlap. No code needed if that holds.
+- Design (revised): Bobby turns cached chunks into real chunks out to the CLIENT's render-distance setting. AWRE now skips tiles inside the EFFECTIVE render distance = min(client option, server view distance) (changed in the G2 audit; the CI log shows `effective render distance 4 chunks`). With Bobby and a client setting above the server's view distance (e.g. 12 vs 4) there is a band where Bobby draws real chunks AND AWRE draws tiles: expect overlap/z-fighting. This contradicts my earlier assumption that no code is needed. Manual check 35 (`docs/MANUAL_TEST_PLAN.md`) tests it; if confirmed, `-Dawre.vanilla.radius=client` (WRITTEN: pure `VanillaRadius`, tested) uses the raw client option; making it automatic when Bobby is loaded is the follow-up (not done, because with Bobby absent that setting leaves a ring with no terrain).
 - Risks: Bobby chunks beyond the *server* view distance but inside the client setting are not in AWRE's "vanilla" assumption in any special way; confirm no gap or double layer at the border. Seam shading differences (vanilla lighting vs AWRE flat colour) will be visible.
 - Work: CI run with Bobby; in-game check at the border. Done when no gap/double layer is observed.
 

@@ -171,6 +171,26 @@ scan "no AWRE-attributable exception in client B log" awre-exceptions client "$O
 noise "$OUT/clientB.log"
 stop_client
 
+# ---------------------------------------------------------------- client D: plain terrain pipeline (-Dawre.reveal=off)
+# Why: clients A/B/C all run the REVEAL pipeline. The plain pipeline (own shader awre_terrain_plain, which applies ModelOffset because vanilla
+# position_color does not) is the fallback when reveal is off or breaks, and had never been run anywhere. This client makes CI compile and
+# draw it headlessly. It cannot judge PLACEMENT (that is manual check 20). PLAIN_CHECK=0 skips it (saves a client start).
+PLAIN_CHECK=${PLAIN_CHECK:-1}
+if [ "$PLAIN_CHECK" = 1 ]; then
+  echo "== client D: plain terrain pipeline (reveal off)"
+  run_client clientD "-Dawre.reveal=off"
+  wait_for "$OUT/clientD.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*' 420 || echo "client D: no meshed tiles seen within timeout"
+  sleep 20      # let the render counters accumulate
+  check "D (plain pipeline) handshake OK"                     "$OUT/clientD.log" '\[AWRE\] handshake OK: protocol v1'
+  check "D plain terrain pipeline is the one in use"           "$OUT/clientD.log" '\[AWRE\] plain terrain pipeline in use'
+  if grep -Eq 'reveal effect active|plain terrain pipeline could not be created' "$OUT/clientD.log" 2>/dev/null; then fail "D reveal was off and the plain pipeline must build (log shows 'reveal effect active' or 'could not be created')"; else pass "D reveal off, plain pipeline built"; fi
+  check "D meshes built from streamed tiles"                   "$OUT/clientD.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*'
+  check "D plain pipeline submitted draw calls"                "$OUT/clientD.log" '\[AWRE\] render: .*submitted_draws=[1-9]'
+  scan "no AWRE-attributable exception in client D log (stack-aware)" awre-exceptions client "$OUT/clientD.log"
+  noise "$OUT/clientD.log"
+  stop_client
+fi
+
 # ---------------------------------------------------------------- opt-in compat clients (informational)
 # COMPAT_MODS="sodium sodium+iris bobby vulkanmod": one client per group with those Modrinth mods added next to AWRE; same synthetic server.
 # Discovery, not a gate: a failure is written to the summary as "COMPAT FAIL" and only fails the job when COMPAT_STRICT=1.
