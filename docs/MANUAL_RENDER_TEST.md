@@ -32,3 +32,13 @@ Sodium, Iris (with a shader pack), VulkanMod: repeat checks 1, 3, 4, 8. Folia, o
 
 ## Related automated check (Session 28)
 `bash tools/preview/run-reference-frame.sh` renders CPU reference frames of the same LOD plan/meshes at origin, negative and large coordinates (CI uploads them as the `reference-frames` artifact). Compare your in-game screenshots with those frames: shape and LOD seams should agree. It does not replace any check above (no GPU, fog, lighting, biome tint or mod behaviour).
+
+## Reveal effect checks (Session 33; NOT RUN; see `docs/REVEAL_EFFECT.md`)
+| # | Check | How | Pass criterion |
+|---|---|---|---|
+| 12 | Effect runs | Join a world with captured terrain; look at the log | `[AWRE] reveal effect active`; no `reveal pipeline ... failed` warning; terrain visible (fallback may be silently in use if the warning is present: then record FAIL) |
+| 13 | Ring + rise + grey | Stand still at join, look toward the horizon for ~8 s | Terrain beyond the vanilla edge spreads out from you as a ring; rises, turns grey while up, settles and recovers its colour; nothing stays displaced or grey afterwards |
+| 14 | No replay | Walk/fly 300 blocks, let LODs swap; edit blocks inside the observed area | LOD swaps and revision updates do not replay the effect; newly streamed ground does reveal |
+| 15 | Reset + off switch | Change dimension, disconnect/reconnect; then start with `-Dawre.reveal=off` | Effect replays after reset; with `off` the terrain just appears (and still draws correctly) |
+Also compare the first frames with `reveal-frames` (CI artifact) for shape; and test with Iris (shader pack on/off) separately.
+

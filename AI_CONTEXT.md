@@ -49,3 +49,6 @@ Supersedes the stale parts of the header above ("Gradle/Fabric/CI/in-game NOT ru
 ## 2026-10-23 (Session 32) update
 
 Added opt-in compat CI (`compat_mods` input -> `integration.sh` compat clients, `tools/ci/compat-lib.sh`) and a diagnostic `tools/ci/api-dump.sh` (artifact `mc-api-dump`) so far-plane/Vulkan API questions are answered from the real jar. Both tested only against mocks in the sandbox; first real CI run pending. See `docs/STATUS.md` (Session 32) and `docs/COMPAT_PLAN.md` (1.1, 3.1).
+
+## Session 33 update
+Distant-terrain reveal effect added (custom shader + `RevealAnimator`, auto-fallback to the plain pipeline, `-Dawre.reveal=off`). Not yet run in CI or in game; see `docs/REVEAL_EFFECT.md`. Pure-Java: core 108 / protocol 67 / stream 84.

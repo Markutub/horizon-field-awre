@@ -42,6 +42,21 @@ dump projection    '^net/minecraft/client/renderer/([a-z]+/)?[A-Za-z0-9_]*(Proje
 dump camera        '^net/minecraft/client/(Camera|Minecraft|Options)\.class$'
 dump rendertypes   '^net/minecraft/client/renderer/(rendertype/)?(RenderType|RenderStateShard|RenderSetup|RenderTypes)[A-Za-z0-9_$]*\.class$'
 
+# Vanilla shader SOURCES (assets are usually in the same jar or in a separate client jar): needed to check what core/position_color does
+# (e.g. whether it applies ModelOffset) and which names dynamictransforms.glsl / projection.glsl declare, which awre_terrain.vsh relies on.
+mkdir -p "$OUT/shaders"
+SHADER_JAR=""
+for j in "$MC_JAR" $(find "${ROOTS[@]}" -name '*.jar' -size +5M 2>/dev/null | sort); do
+  if unzip -Z1 "$j" 2>/dev/null | grep -qx 'assets/minecraft/shaders/core/position_color.vsh'; then SHADER_JAR=$j; break; fi
+done
+if [ -n "$SHADER_JAR" ]; then
+  unzip -o -q "$SHADER_JAR" 'assets/minecraft/shaders/core/position_color.*' 'assets/minecraft/shaders/include/*' -d "$OUT/shaders" 2>/dev/null || true
+  note "vanilla shader sources from $SHADER_JAR: $(find "$OUT/shaders" -type f | wc -l) files (position_color.vsh/.fsh, include/*.glsl)"
+  note "position_color.vsh uses ModelOffset: $(grep -c 'ModelOffset' "$OUT/shaders/assets/minecraft/shaders/core/position_color.vsh" 2>/dev/null || echo unknown) occurrence(s)"
+else
+  note "no jar with assets/minecraft/shaders/core/position_color.vsh found; shader sources not dumped"
+fi
+
 # any Vulkan or alternative-backend classes in the game itself (tells whether this version has a Vulkan backend at all)
 grep -iE 'vulkan|vk[A-Z]|backend' "$OUT/class-index.txt" > "$OUT/backend-classes.txt" || true
 note "backend/vulkan-named classes in the game jar: $(wc -l < "$OUT/backend-classes.txt")"

@@ -58,6 +58,15 @@ Supplied: `integration-logs_1`, `jars`, `reference-frames`, `gradle-reports_5474
 - **Tests after Session 29 changes:** core 98, protocol 67, stream 58 (new test above), render-gate 14. Not yet seen in CI.
 - Still NOT VERIFIED: human-visible rendering, production-scale server cost, compatibility with Sodium/Iris/VulkanMod/Folia.
 
+## Session 33 (terrain reveal effect with custom shader; sandbox, nothing run in CI yet)
+Base: snapshot `horizon-field-awre-g1_ddb08c.zip`, HEAD `2e111b8` (the user's CI-driven commits after `ceeaa68`). Request: chunk-load style reveal (rise, grey while up, settle to normal colour, wave spreading from the player) for distant AWRE terrain, "Level 2 = own shader", plus a test tool. Details: `docs/REVEAL_EFFECT.md`.
+- **New:** `RevealAnimator` (formulas, packing, state), `awre_terrain.vsh/.fsh`, renderer wiring with automatic fallback to the plain pipeline, `tools/preview/RevealPreview.java` (+`run-reveal-preview.sh`, wired into CI `verify` as artifact `reveal-frames`), `api-dump.sh` now also dumps vanilla `position_color` and shader includes, JUnit shim gained delta overloads of `assertEquals`/`assertArrayEquals`.
+- **Run here (pure Java):** core 108, protocol 67, stream 84 (includes `RevealAnimatorTest` 13 and `RevealShaderContractTest` 3), render-gate tests, reference frames, reveal preview (all PASS); syntax check of Paper/Fabric sources clean.
+- **NOT run:** Gradle/Loom build (so `HorizonRenderer` and the shader are compile/link-unverified), headless integration with the new pipeline, any in-game view. The shader has never executed.
+- **Bug found by the preview tool and fixed:** bookkeeping cells (64 blocks) froze the neighbours of the first 16-block tile; now 16-block cells + rectangles for coarse tiles (regression tests added).
+- **Open question to settle with the next `mc-api-dump` artifact:** whether vanilla `position_color` applies `ModelOffset` (if not, the plain fallback pipeline places tiles wrongly; the reveal shader applies it itself).
+- **Paused:** TileLog streaming open / client store byte bound (user asked to do the reveal first).
+
 Next tasks (acceptance criteria):
 1. **Fresh builds (P0).** On a machine with network: `gradle build -PjavaRelease=21 --stacktrace` and `gradle -p awre-fabric build --stacktrace` on this tree. Accept: both exit 0, jars produced, logs kept; any compile errors fixed minimally and re-run.
 2. **Render smoke gate (P0).** Run the `integration` job via workflow_dispatch with `render_smoke=true` on the CI runner. Accept: `G3 render smoke` PASS in the summary on 3 consecutive runs before it is ever made default.

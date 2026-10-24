@@ -34,6 +34,12 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
 
     public MeshResidency<H> residency() { return residency; }
 
+    private RevealAnimator reveal;
+
+    /** Optional reveal effect state. {@link #release()} (dimension change, disconnect, shutdown) resets it so the next session reveals again. */
+    public void setReveal(RevealAnimator r) { this.reveal = r; }
+    public RevealAnimator reveal() { return reveal; }
+
     /** ~10 Hz: refresh which tiles are wanted (the view meshes new/changed tiles in the background). */
     public void tick(double camX, double camZ, double vanillaRadius, double maxDistance, Predicate<TileKey> worldFilter) {
         wanted = view.update(camX, camZ, vanillaRadius, maxDistance, worldFilter);
@@ -123,6 +129,7 @@ public final class HorizonDrawPlanner<H> implements AutoCloseable {
 
     /** Frees all GPU meshes and forgets the plan (disconnect, dimension change, shutdown). The view keeps running. Idempotent. */
     public void release() {
+        if (reveal != null) reveal.reset();
         residency.releaseAll();
         wanted = List.of(); candidates = List.of(); drawKeys = List.of();
         drawsLastFrame = 0; trianglesLastFrame = 0;

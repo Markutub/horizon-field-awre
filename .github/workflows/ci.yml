@@ -48,6 +48,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: reference-frames, path: reference-frames/*.png, if-no-files-found: warn }
+      - name: Reveal-effect preview (CPU model of the terrain reveal; self-checks start/spread/grey/clean end; not the real shader)
+        run: bash tools/preview/run-reveal-preview.sh reveal-frames
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reveal-frames, path: reveal-frames/*, if-no-files-found: warn }
 
   build:
     name: Build Paper plugins + Fabric mod
