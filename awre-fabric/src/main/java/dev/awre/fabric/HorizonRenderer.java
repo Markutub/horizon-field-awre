@@ -44,16 +44,22 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
     /** GPU objects of one tile. */
     record GpuMesh(GpuBuffer vertices, GpuBuffer indices) { }
 
-    // API-ASSUMPTION: RenderPipeline.builder(snippet) + RenderPipelines.register exist; "core/position_color" is a vanilla shader pair;
-    // MATRICES_PROJECTION_SNIPPET declares the DynamicTransforms + Projection uniforms position_color needs.
-    private static final RenderPipeline PIPELINE = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)
-                    .withLocation("pipeline/awre_terrain")
-                    .withVertexShader("core/position_color")
-                    .withFragmentShader("core/position_color")
-                    .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.TRIANGLES)
-                    .withCull(false)
-                    .build());
+    /**
+     * Plain terrain pipeline: our own shader pair (assets/minecraft/shaders/core/awre_terrain_plain.vsh/.fsh) that applies ModelOffset.
+     * NOT vanilla core/position_color: the CI shader dump (run 40060623947) shows that shader ignores ModelOffset, so it would draw every
+     * tile at the camera. A holder class (like RevealPipeline) so a failure to create it is reported and caught, never fatal to the mod.
+     * Same snippet, vertex format and shader-include names as the reveal pipeline, which compiles and draws in CI.
+     */
+    private static final class PlainPipeline {
+        static final RenderPipeline PIPELINE = RenderPipelines.register(
+                RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)
+                        .withLocation("pipeline/awre_terrain_plain")
+                        .withVertexShader("core/awre_terrain_plain")
+                        .withFragmentShader("core/awre_terrain_plain")
+                        .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.TRIANGLES)
+                        .withCull(false)
+                        .build());
+    }
 
     /**
      * Reveal-effect pipeline: same vertex format, our own shader pair (assets/minecraft/shaders/core/awre_terrain.vsh/.fsh, in the
@@ -129,18 +135,37 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
 
     // ---- shader packs (docs/COMPAT_PLAN.md 2.3) ----
     private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
+    private boolean irisAssigned;                  // true only after Iris ACCEPTED the plain pipeline (experimental, -Dawre.iris=assign)
+    private boolean plainBroken, plainLogged;
 
     /**
-     * @param assign true: ask the shader-pack mod (Iris) to render the PLAIN terrain pipeline with the pack's terrain program, so a pack can
-     *               shade AWRE terrain. UNVERIFIED against a real Iris for 1.21.11 (API per a secondary source); the outcome is logged.
+     * @param assign EXPERIMENTAL (-Dawre.iris=assign): ask the shader-pack mod (Iris) to render the PLAIN terrain pipeline with the pack's
+     *               TERRAIN program. Default false: detect and log only, AWRE keeps drawing with its own shaders, which place tiles
+     *               correctly but are not shaded by the pack. Unverified against a real Iris for 1.21.11: whether Iris has the method,
+     *               and whether the pack's terrain program places tiles correctly (our pipeline has no chunk-offset uniforms).
      */
     void setShaderBridge(dev.awre.stream.compat.ShaderPackBridge bridge, boolean assign) {
         this.shaderBridge = bridge == null ? dev.awre.stream.compat.ShaderPackBridge.NONE : bridge;
         if (this.shaderBridge == dev.awre.stream.compat.ShaderPackBridge.NONE) return;
-        if (!assign) { LOG.info("[AWRE] Iris assignPipeline skipped (-Dawre.iris=off)"); return; }
+        if (!assign) { LOG.info("[AWRE] Iris detected: detect-only (AWRE terrain keeps its own shaders and is not shaded by packs); -Dawre.iris=assign is experimental"); return; }
         boolean ok;
-        try { ok = this.shaderBridge.assignTerrainPipeline(PIPELINE); } catch (Throwable t) { ok = false; }
-        LOG.info("[AWRE] Iris assignPipeline(plain terrain pipeline -> TERRAIN): {}", ok ? "ACCEPTED" : "NOT available (shader packs will not shade AWRE terrain)");
+        try { ok = this.shaderBridge.assignTerrainPipeline(PlainPipeline.PIPELINE); } catch (Throwable t) { ok = false; }
+        irisAssigned = ok;
+        LOG.info("[AWRE] Iris assignPipeline(plain terrain pipeline -> TERRAIN): {}", ok ? "ACCEPTED (experimental: placement under a pack is unverified)" : "NOT available");
+    }
+
+    /** The plain pipeline, or null (logged once) if it cannot be created. */
+    private RenderPipeline plainPipelineOrNull() {
+        if (plainBroken) return null;
+        try {
+            RenderPipeline p = PlainPipeline.PIPELINE;
+            if (!plainLogged) { plainLogged = true; LOG.info("[AWRE] plain terrain pipeline in use (reveal effect off or unavailable)"); }
+            return p;
+        } catch (Throwable t) {
+            plainBroken = true;
+            LOG.error("[AWRE] plain terrain pipeline could not be created; AWRE terrain is NOT drawn (vanilla position_color would misplace tiles)", t);
+            return null;
+        }
     }
 
     /** Client stopping (render thread): closes the projection buffer. */
@@ -197,12 +222,17 @@ final class HorizonRenderer implements MeshResidency.Backend<HorizonRenderer.Gpu
             // the pass only binds the already-written slices. The lambdas capture the slice, so its type is never named here.
             // API-ASSUMPTION: DynamicUniforms.writeTransform(modelView, colour, modelOffset, texMatrix).
             List<java.util.function.Consumer<RenderPass>> uniformBinders = new java.util.ArrayList<>(draws.size());
-            RenderPipeline pipeline = PIPELINE;
-            // a shader pack replaces the terrain program of the plain pipeline; the reveal shader (own uniforms) cannot run inside a pack
-            boolean useReveal = animator.enabled() && !revealBroken && !shaderBridge.shaderPackActive();
+            RenderPipeline pipeline = null;
+            // only when Iris accepted the plain pipeline AND a pack is active does the plain pipeline replace the reveal one (the reveal
+            // shader's own uniforms cannot run inside a pack's program)
+            boolean useReveal = animator.enabled() && !revealBroken && !(irisAssigned && shaderBridge.shaderPackActive());
             if (useReveal) {
                 try { pipeline = RevealPipeline.PIPELINE; }
                 catch (Throwable t) { revealBroken = true; useReveal = false; LOG.warn("[AWRE] reveal pipeline could not be created; using the plain terrain pipeline", t); }
+            }
+            if (pipeline == null) {
+                pipeline = plainPipelineOrNull();
+                if (pipeline == null) { p.recordSubmitted(0); return; }     // drawing through a pipeline that misplaces tiles is worse than not drawing
             }
             long now = System.nanoTime();
             for (HorizonDrawPlanner.Draw<GpuMesh> d : draws) {

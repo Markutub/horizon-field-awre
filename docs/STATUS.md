@@ -1,11 +1,11 @@
 # Project Status
 
-## Session 34 (Iris step 2 from Iris's public API; sandbox)
+## Session 35 (CI run 40060623947 analysed; corrects Session 34)
 
-- Research: Iris public API v0.3 reportedly has `assignPipeline(RenderPipeline, IrisProgram)` (secondary source; see `docs/COMPAT_PLAN.md` 2.3 for provenance and the 5 unknowns).
-- Added: `IrisReflection` (pure, by reflection, tested against fakes with Iris's names: 4 tests, stream now 95), `ShaderPackBridge#assignTerrainPipeline`, `HorizonRenderer#setShaderBridge` (assigns the plain pipeline at startup, logs ACCEPTED/NOT available; plain pipeline used while a pack is active), `-Dawre.iris=auto|off`, CI compat NOTE for the log line. `IrisBridge` is now a 5-line wrapper. Fabric side syntax-checked only.
-- NOT verified: that a real Iris for 1.21.11 has the method; anything visual under a pack.
-- Next: run `ci` with `compat_mods=sodium+iris`; read the `Iris assignPipeline` NOTE and the far-plane lines.
+Evidence (artifacts `integration-logs`, `mc-api-dump`): all checks PASS. `far plane: vanilla=2048.0 awre=18534.4 (implied near 0.05)`; ~3.9M draws, 0 failures; reveal pipeline active. Dump: vanilla `position_color.vsh` has 0 uses of `ModelOffset`; `include/fog.glsl` content known (see COMPAT_PLAN 1.1).
+- **Correction to Session 34:** its Iris change forced the plain pipeline whenever a shader pack was active. That pipeline used vanilla `position_color`, which ignores `ModelOffset` => tiles at the camera. Fixed here: (1) new `awre_terrain_plain.vsh/.fsh` (applies ModelOffset) behind `PlainPipeline`; vanilla position_color is no longer used anywhere (`PlainShaderContractTest` pins it); (2) Iris assignment is now detect-only by default, `-Dawre.iris=assign` is experimental, and the plain pipeline replaces reveal only if Iris accepted AND a pack is active; (3) if the plain pipeline cannot be created nothing is drawn (logged) instead of drawing misplaced tiles.
+- Still NOT verified: visible output, FOV match, seam depth, Iris (all). Fabric side syntax-checked only; suites: core 108, protocol 67, stream 98.
+- Next: commit; CI with `compat_mods=sodium sodium+iris bobby vulkanmod`; human visual check (with/without `-Dawre.far=off`).
 
 ## Session 33 (far plane from the real API dump; sandbox)
 

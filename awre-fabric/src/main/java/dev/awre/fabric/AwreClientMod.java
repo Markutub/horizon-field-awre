@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * Minecraft generation rewrites this file and HorizonRenderer, nothing else.
  *
  * <p>JVM properties: {@code -Dawre.render=auto|on|off} (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
- * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|off} (auto: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
+ * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|assign} (auto = detect only; assign = EXPERIMENTAL: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
  */
 public final class AwreClientMod implements ClientModInitializer {
     static final Logger LOG = LoggerFactory.getLogger("AWRE");
@@ -43,7 +43,7 @@ public final class AwreClientMod implements ClientModInitializer {
         loadColorOverrides();
         loadBiomeOverrides();
         shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
-        renderer.setShaderBridge(shaderBridge, !"off".equalsIgnoreCase(System.getProperty("awre.iris", "auto")));
+        renderer.setShaderBridge(shaderBridge, "assign".equalsIgnoreCase(System.getProperty("awre.iris", "auto")));
 
         double maxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
         renderer.configureFar(System.getProperty("awre.far", "auto"), maxDistance);
@@ -68,7 +68,7 @@ public final class AwreClientMod implements ClientModInitializer {
             boolean shaders = shaderBridge.shaderPackActive();
             if (shaders != lastShaderActive) {
                 lastShaderActive = shaders;
-                LOG.info("[AWRE] shader pack {}{}", shaders ? "ACTIVE" : "inactive", shaders ? ": plain terrain pipeline is used (no reveal effect); whether the pack shades it depends on Iris accepting assignPipeline (see the assignPipeline log line); UNVERIFIED visually" : "");
+                LOG.info("[AWRE] shader pack {}{}", shaders ? "ACTIVE" : "inactive", shaders ? ": AWRE terrain is drawn with its own shaders and is NOT shaded by the pack (unless -Dawre.iris=assign was accepted; experimental)" : "");
             }
             // The square vanilla really draws is limited by what the SERVER sends: Options#getEffectiveRenderDistance() is min(client option, server
             // view distance). The raw option (renderDistance().get()) hid ~450 tiles that vanilla was not drawing (G2 audit; signature from mc-api-dump).

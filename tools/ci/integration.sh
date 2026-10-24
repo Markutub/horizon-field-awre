@@ -218,9 +218,9 @@ if [ -n "${COMPAT_MODS// /}" ]; then
     if grep -En 'AWRE.*(Exception|rejected)' "$L" > /dev/null 2>&1; then
       cfail "$grp" "AWRE-related exception in log"; grep -En -m2 -A8 'AWRE.*(Exception|rejected)' "$L" | head -24
     fi
-    grep -E '\[AWRE\] (shader pack|compat target|LOD mod|Iris assignPipeline|far plane)' "$L" | sort -u | head -8 || true
+    grep -E '\[AWRE\] (shader pack|compat target|LOD mod|Iris assignPipeline|Iris detected|far plane)' "$L" | sort -u | head -8 || true
     # informational: did this Iris accept assignPipeline(pipeline -> TERRAIN)? (answers the API question for the installed Iris build)
-    if grep -q 'Iris assignPipeline' "$L" 2>/dev/null; then cnote "$grp" "$(grep -m1 'Iris assignPipeline' "$L" | sed 's/.*\[AWRE\] //' | cut -c1-200)"; fi
+    if grep -Eq 'Iris (assignPipeline|detected)' "$L" 2>/dev/null; then cnote "$grp" "$(grep -Em1 'Iris (assignPipeline|detected)' "$L" | sed 's/.*\[AWRE\] //' | cut -c1-200)"; fi
     stop_client
     for f in $added; do rm -f "$MODS_DIR/$f"; done      # restore the baseline mods dir for the next group
   done
