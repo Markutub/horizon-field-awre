@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="ProjectModuleManager">
-    <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/awre-paper/horizon-field.awre-paper.main.iml" filepath="$PROJECT_DIR$/.idea/modules/awre-paper/horizon-field.awre-paper.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/horizon-paper/horizon-field.horizon-paper.main.iml" filepath="$PROJECT_DIR$/.idea/modules/horizon-paper/horizon-field.horizon-paper.main.iml" />
-    </modules>
-  </component>
-</project>
