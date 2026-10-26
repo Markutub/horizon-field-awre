@@ -1,5 +1,8 @@
 # AWRE G1 - Next phase: prove it, measure it, then fix what the measurements show
 
+## Status after Session 33 (read this before the tasks)
+Done and tested offline: task 3 core (eviction policy), task 4 ceiling gating, the governor part of task 2, the FrameCheck tool and CI wiring of task 1. Still open and needing the user's machine or CI: (a) run the MSPT A/B in `docs/MEASUREMENT_PLAN.md` and send the lines back; (b) task 1's in-game capture: write it from the `Screenshot` signatures that the next `mc-api-dump` artifact contains, then add the control run and the `FrameCheck` step to `tools/ci/integration.sh`; (c) task 5 pinning needs the resolved Loom and Paper API versions from a build log; (d) everything Paper/Fabric written in Session 33 is syntax-checked only: the first CI/local build may reveal compile errors (suspects: `Server#getTickTimes`, `World#getEnvironment` is certain, the rest is plain Java).
+
 ## Role
 Principal engineer on the existing `horizon-field-awre-g1` repository (Java 21, Paper 1.21.11 plugin, Fabric 1.21.11 client mod, pure-Java engine modules). Work directly in the repo. Treat the source and the evidence files as the truth; read `docs/REVIEW_HONEST.md` first, then `docs/HANDOFF.md` (top section only) and `AI_CONTEXT.md`.
 
@@ -35,7 +38,7 @@ When `TerrainStore` is full it refuses new coordinates and the cache replays old
 
 ## Task 4: small correctness guards (each with a regression test)
 - Skip or gate ceilinged dimensions (Nether-like) so their roof is never streamed as terrain; make the behaviour a documented config key. Do not claim Nether support.
-- Reset a blacklisted tile when its revision changes.
+- (Blacklist reset on revision change already exists and is tested; do not redo it.)
 
 ## Task 5: reproducibility and feedback loop
 - Read the resolved Loom and Paper API versions from a CI log (ask the user for the `build` job output if you cannot see them) and pin them; decide the Java matrix (21 only, or add a non-blocking Java 25 job) and make `gradle.properties` say what CI builds.

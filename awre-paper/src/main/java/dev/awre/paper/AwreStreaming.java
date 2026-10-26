@@ -58,7 +58,7 @@ final class AwreStreaming {
     void start(AwreConfig c) {
         this.cfg = c;
         if (c.streamCaptured()) {
-            capture = new AwreCapture(plugin, this, c.revalidateSeconds());
+            capture = new AwreCapture(plugin, this, c.revalidateSeconds(), c.captureBudgetMicros() * 1000L);
             capture.start();
             // load every world's terrain (and replay its disk cache) now, not when the first chunk event or player happens to touch it
             plugin.getServer().getScheduler().runTask(plugin, () -> { for (World w : plugin.getServer().getWorlds()) terrainFor(w); });
@@ -90,9 +90,19 @@ final class AwreStreaming {
     }
 
     /** Terrain for a world (created on first use); in synthetic mode every world shares the same terrain. Main thread or async. */
+    /** True for worlds that are deliberately not captured or streamed (a ceiling would be streamed as terrain; see WorldEligibility). Cheap: safe to call per event. */
+    boolean skipsWorld(World w) {
+        AwreConfig c = cfg;
+        if (c == null || !dev.awre.stream.WorldEligibility.skipsStreaming(w.getEnvironment().name(), c.skipCeilingWorlds())) return false;
+        if (skippedLogged.add(w.getUID())) plugin.getLogger().info("[AWRE] world '" + w.getName() + "' (" + w.getEnvironment() + ") has a ceiling: its roof would be streamed as terrain, so it is not captured or streamed (stream.skip-ceiling-worlds: false overrides)");
+        return true;
+    }
+
+    private final java.util.Set<UUID> skippedLogged = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     AwreWorldTerrain terrainFor(World w) {
         AwreConfig c = cfg;
-        if (c == null) return null;
+        if (c == null || skipsWorld(w)) return null;
         UUID key = c.streamCaptured() ? w.getUID() : SYNTHETIC_KEY;
         AwreWorldTerrain existing = terrains.get(key);
         if (existing != null) return existing;
@@ -155,6 +165,7 @@ final class AwreStreaming {
         String dim = AwreChannel.wireDimension(w);
         UUID wid = w.getUID();
         AwreWorldTerrain t = terrainFor(w);
+        if (t == null) { entries.remove(p.getUniqueId()); return; }      // not streamed in this world (e.g. a ceiling): no stream, and the previous world's stream stops
         StreamConfig sc = new StreamConfig(c.streamRadius(), c.streamBytesPerSecond(), 65_536, 0.1, c.streamMaxHeldTiles(), 16, 256, 3);
         entries.put(p.getUniqueId(), new Entry(new PlayerStreamer(s, t.store, t.palette, new LodPlanner(model), sc,
                 wid.getMostSignificantBits(), wid.getLeastSignificantBits(), dim, System::nanoTime, retryCooldownNanos()), wid));
@@ -191,10 +202,18 @@ final class AwreStreaming {
             r = dev.awre.stream.StoreBudget.resolve(0, Runtime.getRuntime().maxMemory());
         }
         store.setMaxChunks(r.maxChunks());
+        String pol = plugin.getConfig().getString("stream.store-full-policy", "evict-oldest");
+        TerrainStore.FullPolicy fp = "refuse-new".equalsIgnoreCase(pol) ? TerrainStore.FullPolicy.REFUSE_NEW : "evict-oldest".equalsIgnoreCase(pol) ? TerrainStore.FullPolicy.EVICT_OLDEST : null;
+        if (fp == null) { plugin.getLogger().warning("[AWRE] stream.store-full-policy must be evict-oldest or refuse-new (got '" + pol + "'); using evict-oldest"); fp = TerrainStore.FullPolicy.EVICT_OLDEST; }
+        store.setFullPolicy(fp);
+        plugin.getLogger().info("[AWRE] terrain store full policy for '" + world + "': " + (fp == TerrainStore.FullPolicy.EVICT_OLDEST ? "evict-oldest" : "refuse-new"));
         plugin.getLogger().info("[AWRE] terrain store cap for '" + world + "': " + r.maxChunks() + " chunks (~" + (r.budgetBytes() >> 20) + " MiB, " + (r.auto() ? "automatic" : "configured") + ")");
     }
 
     /** Total chunks refused because a world's terrain store was full (0 = the cap was never hit). */
+    /** Total chunks removed to admit newer ones (stream.store-full-policy: evict-oldest). */
+    long storeEvicted() { long n = 0; for (AwreWorldTerrain t : terrains.values()) n += t.store.evictedChunks(); return n; }
+
     long storeRejected() { long n = 0; for (AwreWorldTerrain t : terrains.values()) n += t.store.rejectedChunks(); return n; }
 
     /** Capture backlog (requested / handled / retried / waiting / queued / peak waiting), or null when capture is off. */
@@ -202,7 +221,7 @@ final class AwreStreaming {
         AwreCapture c = capture;
         if (c == null) return null;
         var st = c.stats();
-        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting() + " " + c.timingStats() + " storeRejected=" + storeRejected();
+        return "capture: requested=" + st.requested() + " handled=" + st.handled() + " retried=" + st.retried() + " waiting=" + st.waiting() + " queued=" + st.queued() + " peakWaiting=" + st.maxWaiting() + " " + c.timingStats() + " storeRejected=" + storeRejected() + " storeEvicted=" + storeEvicted();
     }
 
     int terrainChunks(Player p) { AwreWorldTerrain t = terrainFor(p.getWorld()); return t == null ? 0 : t.store.chunkCount(); }

@@ -1,6 +1,7 @@
 package dev.awre.paper;
 
 import dev.horizonfield.core.CaptureBacklog;
+import dev.horizonfield.core.DrainGovernor;
 import dev.horizonfield.core.TimingWindow;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
@@ -49,7 +50,6 @@ import java.util.UUID;
 final class AwreCapture implements Listener {
     private record Ref(UUID world, int cx, int cz) { }
     private static final int MAX_PER_TICK = 2;
-    private static final long BUDGET_NANOS = 500_000L;   // 0.5 ms per tick on the main thread
 
     private final JavaPlugin plugin;
     private final AwreStreaming streaming;
@@ -57,16 +57,18 @@ final class AwreCapture implements Listener {
     private final CaptureBacklog<Ref> backlog = new CaptureBacklog<>(4096);
     private final long revalidateTicks;
     private long sinceSweep;
-    // Bounded main-thread cost instrumentation (last 2048 samples each; see docs/MEASUREMENT_PLAN.md). Measures, does not tune.
+    private final DrainGovernor governor;                    // bounds the AVERAGE main-thread time per tick (snapshots and the sweep), not just the time before each snapshot
+    // Bounded main-thread cost instrumentation (last 2048 samples each; see docs/MEASUREMENT_PLAN.md). Measures; the drain itself is bounded by the DrainGovernor.
     private final TimingWindow snapshotTimes = new TimingWindow(2048);   // one ChunkSnapshot + submit
     private final TimingWindow tickTimes = new TimingWindow(2048);       // whole tick() body: sweep enqueue + pump + drain
     private volatile int lastSweepChunks;
     private volatile long lastSweepNanos;
     private BukkitTask task;
 
-    /** @param revalidateSeconds 0 = never re-observe loaded chunks that no event reported as changed */
-    AwreCapture(JavaPlugin plugin, AwreStreaming streaming, int revalidateSeconds) {
+    /** @param revalidateSeconds 0 = never re-observe loaded chunks that no event reported as changed; @param budgetNanosPerTick average main-thread time per tick for capture */
+    AwreCapture(JavaPlugin plugin, AwreStreaming streaming, int revalidateSeconds, long budgetNanosPerTick) {
         this.plugin = plugin; this.streaming = streaming; this.revalidateTicks = revalidateSeconds * 20L;
+        this.governor = new DrainGovernor(budgetNanosPerTick, 150_000L);   // 0.15 ms: about the p50..p75 snapshot cost measured in CI until real costs are known
     }
 
     void start() {
@@ -88,7 +90,7 @@ final class AwreCapture implements Listener {
     int enqueueLoaded(World w) { Chunk[] loaded = w.getLoadedChunks(); for (Chunk c : loaded) request(w, c.getX(), c.getZ()); return loaded.length; }
 
     /** O(1): safe to call from any event, however often it fires; priorities are computed when the work is queued. */
-    void request(World w, int cx, int cz) { backlog.request(new Ref(w.getUID(), cx, cz)); }
+    void request(World w, int cx, int cz) { if (streaming.skipsWorld(w)) return; backlog.request(new Ref(w.getUID(), cx, cz)); }
 
     private void requestBlock(Block b) { if (b != null) request(b.getWorld(), b.getX() >> 4, b.getZ() >> 4); }
 
@@ -121,14 +123,16 @@ final class AwreCapture implements Listener {
                 if (t != null && t.ready) n += enqueueLoaded(w);
             }
             lastSweepChunks = n; lastSweepNanos = System.nanoTime() - s0;
+            governor.record(lastSweepNanos);                         // listing every loaded chunk is main-thread time too: it delays the drain instead of adding to the tick
         }
+        governor.onTick();
         backlog.pump(this::priority);
         backlog.drain(ref -> {
             long s0 = System.nanoTime();
             try { return snapshot(ref); }
             catch (RuntimeException e) { plugin.getLogger().warning("[AWRE] snapshot failed for " + ref + ": " + e); return true; }   // a chunk that throws must not be retried forever
-            finally { snapshotTimes.record(System.nanoTime() - s0); }
-        }, BUDGET_NANOS, MAX_PER_TICK);
+            finally { long dt = System.nanoTime() - s0; snapshotTimes.record(dt); governor.record(dt); }
+        }, governor::mayStart, MAX_PER_TICK);
     }
 
     /** @return true when the request is finished (observed, or nothing to observe), false to try again on a later tick */

@@ -21,3 +21,22 @@ Tune `stream.revalidate-seconds` from synthetic benchmarks; force-load or genera
 
 ## Synthetic baseline (Session 28)
 `docs/scalebench-output.txt` (`bash tools/bench/run-scalebench.sh`) gives a synthetic ingest/stream baseline at 1k/4k/16k chunks. It informs expectations only: it does not measure Paper main-thread cost and must not be used to tune `stream.revalidate-seconds`.
+
+## MSPT A/B at 4,100+ loaded chunks (Session 33; NOT RUN yet - this is what to run)
+
+What it answers: how much main-thread time does AWRE add, and is the capture drain (now governed by `stream.capture-budget-micros`) within budget at a realistic chunk count? Nothing here has been measured yet; the only server data so far is 187 chunks on a CI runner.
+
+Setup (write it down with every result): hardware (CPU model, cores, RAM), Java version and JVM flags, Paper build, `server.properties` (`level-type=flat`, `view-distance=32`, `simulation-distance=10`, `online-mode=false` for a local test), the plugin jar commit, cold or warm terrain cache (`plugins/AWRE/terrain/` present or deleted).
+
+`plugins/AWRE/config.yml` for both runs: `diagnostics.mspt-seconds: 30`, `stream.source: captured`, `stream.persist: true`, `stream.revalidate-seconds: 600` (run C below: `60`).
+
+| Run | `stream.enabled` | Player |
+|---|---|---|
+| A baseline | `false` | stands still 5 minutes at one spot (view-distance 32 loads about 4,225 chunks) |
+| B AWRE | `true` | same spot, 5 minutes, cold cache |
+| C sweep | `true`, `revalidate-seconds: 60` | same spot, 5 minutes, warm cache (restart after B) |
+| D movement | `true` | after 2 minutes still: sprint in a straight line for 2 minutes, then stop |
+
+Send back, per run: all `[AWRE] mspt:` lines, the last `/awre stats` output (it contains `capture: ... snapshot[...] tick[...] ... storeRejected= storeEvicted=`), and the `[AWRE] terrain store cap` and `compacted` lines. Compare `mspt` p50/p95/p99/max of B, C, D against A; the difference is AWRE's cost (the tick time includes everything on the main thread, not only this plugin).
+
+Reading the result: the capture budget (average 0.5 ms per tick = 1% of a 50 ms tick) is bounded by `DrainGovernor` in source and tests; what the A/B shows is the real cost on top of it (snapshots are heavier than their measured p50, the sweep's `getLoadedChunks()` listing, event handlers, the 100 ms planner replan on the main thread, `channel.send`). If B-A at p99 exceeds about 2 ms, lower `stream.capture-budget-micros` (100..5000) first and re-run; do not raise it.

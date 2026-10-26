@@ -20,6 +20,9 @@ stream:
   compact-garbage-ratio: 0.5      # 0.1..0.95: rewrite a world's cache file when this share of its tile records is superseded (checked every 30 s)
   compact-min-bytes: 1048576      # ...and the file is at least this big (0 = size does not matter)
   revalidate-seconds: 600         # 0..86400, captured mode: re-observe every loaded chunk this often (0 = only on load and on block events). Catches WorldEdit, fluids, other plugins. Main-thread cost: one ChunkSnapshot per chunk at <= 2 per tick within a 0.5 ms budget (NOT yet measured on a real server)
+  capture-budget-micros: 500      # 100..5000: AVERAGE main-thread time per tick that chunk capture (snapshots and the periodic sweep) may use. A snapshot costing more than this still runs, just less often. 0.5 ms = 1% of a 50 ms tick. NOT yet validated on a real server (the only measurement: 187 chunks on a CI runner, snapshot p99 4.45 ms)
+  skip-ceiling-worlds: true       # true: worlds with a ceiling (the Nether) are neither captured nor streamed, because a one-surface-per-column terrain of them is their bedrock roof. false: stream it anyway. Datapack dimensions with a ceiling are not detected.
+  store-full-policy: evict-oldest # evict-oldest | refuse-new. What a full per-world store does with a chunk at a NEW coordinate: evict-oldest removes the least recently observed chunks (the store follows where players are; one O(n) scan per cap/64 admissions, tens to hundreds of ms on the ingest thread, never the main thread); refuse-new keeps whatever was captured first. Evicted chunks stay in the on-disk cache.
   max-store-mib: 0                # 0..65536, memory budget for observed terrain PER WORLD (about 450 bytes per chunk). 0 = automatic: min(512 MiB, 1/8 of the max heap). When full, chunks at NEW coordinates are not captured (stored ones keep updating); a warning is logged.
   retry-cooldown-seconds: 60      # 5..3600, a tile a client keeps failing to accept is held back this long before one more attempt (doubles per further failure, up to 16x; a changed tile is retried at once)
 limits:
@@ -32,3 +35,6 @@ limits:
   tile-burst: 4
   tile-refill-per-sec: 2.0
   strike-limit: 5                 # malformed frames before a player's session is ignored until reconnect
+
+diagnostics:
+  mspt-seconds: 0                 # 0 = off. > 0: log server MSPT percentiles (p50/p95/p99/max over the last period) every N seconds, independent of stream.enabled. For an A/B: same server, stream.enabled false (baseline) then true. See docs/MEASUREMENT_PLAN.md

@@ -134,6 +134,10 @@ Verified against the uploaded Session 16 source snapshot on 2026-10-21. This is 
 | Legacy vanilla delivery / ghost chunks / display entities | `horizon-paper/.../delivery/DeliveryChannel.java`, `docs/PROTOCOL.md`, `docs/EXPERIMENTS.md` | Experiments are documented as hypotheses/gates, not proven by the pure-Java suite | Experimental / unverified; do not claim beyond-render-distance delivery |
 | Gradle build and Paper/Fabric API compatibility | Root and separate Fabric Gradle builds; CI workflow | Not run here (network/dependency resolution and actual CI unavailable) | Unverified in this session |
 
+## Session 33 summary
+
+Offline execution of the next-phase brief: evict-oldest store policy (+ a writer race fixed), `DrainGovernor` for the capture drain, MSPT diagnostic sampler, ceiling-world gating, `FrameCheck` for visible-pixel proof (tool and tests only; in-game capture pending the `Screenshot` signatures), pre-push build docs. core 134 / protocol 73 / stream 114 and four script tests pass; Paper/Fabric changes are syntax-checked only. No server or pixel measurement exists yet. Details and the user's to-do list: `docs/HANDOFF.md` (Session 33).
+
 ## Session 31 summary
 
 From the supplied CI logs: the `built - uploaded = 4` gap is a sampling artifact (render line logged right after the 10 Hz plan refresh). Real finding: client mesh throughput was capped at 40 tiles/s (`maxInFlight` 4 x 10 Hz updates; measured 40.8 / 39.4 / 40.8 / 40.0 per second in the CI log; mesher itself ~0.14 ms/tile). `ClientHorizonView.DEFAULT_MAX_IN_FLIGHT = 64` (model: 39.7 s -> 2.5 s for ~1600 tiles), `MeshThroughputTest` (3). Pure Java: core 98, protocol 67, stream 64, render-gate 15. CI confirmation of the new rate pending. Reference-frame PNGs from CI are byte-identical to the sandbox renders. Details: `docs/HANDOFF.md` (Session 31).

@@ -7,7 +7,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 /** Immutable, validated configuration. Anything invalid falls back to {@link Limits#defaults()} (logged). */
 public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debug, Limits limits, int autoFragmentTestSide,
                          boolean autoStream, boolean streamCaptured, boolean streamPersist, boolean streamImport, int syntheticChunkRadius, double streamRadius, double streamBytesPerSecond, int streamMaxHeldTiles,
-                         double compactGarbageRatio, long compactMinBytes, int revalidateSeconds) {
+                         double compactGarbageRatio, long compactMinBytes, int revalidateSeconds, int captureBudgetMicros, boolean skipCeilingWorlds) {
 
     public static AwreConfig load(FileConfiguration c, Logger log) {
         Limits d = Limits.defaults();
@@ -50,7 +50,9 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         if (minBytes < 0 || minBytes > (1L << 40)) { log.warning("[AWRE] stream.compact-min-bytes out of range; using 1048576"); minBytes = 1_048_576L; }
         int reval = c.getInt("stream.revalidate-seconds", 600);
         if (reval < 0 || reval > 86_400) { log.warning("[AWRE] stream.revalidate-seconds must be 0..86400; using 600"); reval = 600; }
+        int budget = c.getInt("stream.capture-budget-micros", 500);
+        if (budget < 100 || budget > 5000) { log.warning("[AWRE] stream.capture-budget-micros must be 100..5000; using 500"); budget = 500; }
         return new AwreConfig(c.getBoolean("enabled", true), c.getBoolean("auto-send-test-tile", true), c.getBoolean("debug", false), l, side,
-                stream, captured, c.getBoolean("stream.persist", true), c.getBoolean("stream.import-horizon-cache", true), synth, radius, bps, held, ratio, minBytes, reval);
+                stream, captured, c.getBoolean("stream.persist", true), c.getBoolean("stream.import-horizon-cache", true), synth, radius, bps, held, ratio, minBytes, reval, budget, c.getBoolean("stream.skip-ceiling-worlds", true));
     }
 }

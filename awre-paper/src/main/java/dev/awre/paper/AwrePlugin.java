@@ -8,6 +8,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class AwrePlugin extends JavaPlugin {
     private AwreChannel channel;
     private AwreStreaming streaming;
+    private AwreMspt mspt;
 
     @Override
     public void onEnable() {
@@ -18,6 +19,8 @@ public final class AwrePlugin extends JavaPlugin {
         streaming = new AwreStreaming(this, channel);
         channel.setStreaming(streaming);
         streaming.start(cfg);
+        int msptSeconds = getConfig().getInt("diagnostics.mspt-seconds", 0);
+        if (msptSeconds > 0) { mspt = new AwreMspt(this, Math.min(msptSeconds, 3600)); mspt.start(); }
         PluginCommand pc = Objects.requireNonNull(getCommand("awre"), "command 'awre' missing from plugin.yml");
         AwreCommand handler = new AwreCommand(this, channel);
         pc.setExecutor(handler);
@@ -28,6 +31,7 @@ public final class AwrePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (mspt != null) mspt.stop();
         if (streaming != null) streaming.stop();
         if (channel != null) channel.unregister();
         getLogger().info("AWRE disabled; channel unregistered, sessions dropped.");

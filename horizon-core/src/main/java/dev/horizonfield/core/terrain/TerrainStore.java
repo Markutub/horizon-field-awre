@@ -24,6 +24,14 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class TerrainStore {
     public enum Reduce { MEAN, MAX }
 
+    /** What a full store does with a chunk at a NEW coordinate. */
+    public enum FullPolicy {
+        /** Refuse it (the store only ever grows to the cap; what was observed first stays). The default, and the historical behaviour. */
+        REFUSE_NEW,
+        /** Make room by removing the least recently observed chunks, so the store follows where the players are now. */
+        EVICT_OLDEST
+    }
+
     public record Versioned(LodTile tile, long version) { }
     private record Cached(long version, LodTile tile) { }
 
@@ -34,6 +42,9 @@ public final class TerrainStore {
     private final AtomicLong clock = new AtomicLong(0);
     private final AtomicLong rejected = new AtomicLong();       // new chunks refused because the store was full (see setMaxChunks)
     private volatile int maxChunks = Integer.MAX_VALUE;
+    private volatile FullPolicy fullPolicy = FullPolicy.REFUSE_NEW;
+    private final AtomicLong evicted = new AtomicLong();          // chunks removed to admit newer ones (see FullPolicy.EVICT_OLDEST)
+    private final Object evictLock = new Object();
     private final AtomicLong columnBytes = new AtomicLong();   // approx heap held by the observed chunks (see ColumnTile#approxHeapBytes)
     private final Map<LodKey, Cached> cache;
 
@@ -65,15 +76,79 @@ public final class TerrainStore {
     /** @return the new version, the existing one if the content is identical, or 0 if the chunk is new and the store is full (nothing stored) */
     public long put(ColumnTile t) {
         long k = ck(t.chunkX(), t.chunkZ());
-        ColumnTile old = chunks.get(k);
-        if (old != null && old.sameContent(t)) return versions.get(new LodKey(0, t.chunkX(), t.chunkZ()));
-        if (old == null && chunks.size() >= maxChunks) { rejected.incrementAndGet(); return 0; }
+        // Writers (put, evict) exclude each other: chunks/versions/columnBytes change together. Readers (version, tile) never take this lock.
+        synchronized (evictLock) {
+            ColumnTile old = chunks.get(k);
+            if (old != null && old.sameContent(t)) {
+                Long same = versions.get(new LodKey(0, t.chunkX(), t.chunkZ()));
+                if (same != null) {
+                    // Re-observing an unchanged chunk is a touch: under EVICT_OLDEST it keeps the chunk young (same content = same size, so no accounting change)
+                    if (fullPolicy == FullPolicy.EVICT_OLDEST && t.observedAtMillis() > old.observedAtMillis()) chunks.replace(k, old, t);
+                    return same;
+                }
+            }
+            if (old == null && chunks.size() >= maxChunks) {
+                if (fullPolicy == FullPolicy.REFUSE_NEW || !makeRoomFor(t)) { rejected.incrementAndGet(); return 0; }
+            }
+            long v = clock.incrementAndGet();
+            ColumnTile prev = chunks.put(k, t);
+            columnBytes.addAndGet(t.approxHeapBytes() - (prev == null ? 0 : prev.approxHeapBytes()));
+            LodKey n = new LodKey(0, t.chunkX(), t.chunkZ());
+            for (int l = 0; l <= maxLod; l++) { versions.merge(n, v, Math::max); if (l < maxLod) n = n.parent(); }
+            return v;
+        }
+    }
+
+    /**
+     * What a full store does with a chunk at a new coordinate (default {@link FullPolicy#REFUSE_NEW}). With EVICT_OLDEST the removed chunks
+     * are the least recently OBSERVED ones (observedAtMillis; a re-observation of unchanged content counts), a batch of about 1/64 of the cap
+     * at a time so the O(n) scan is amortised. An incoming chunk older than everything held is refused instead of replacing newer data.
+     * Clients keep the tiles they already hold; the coarse tiles above an evicted chunk are re-versioned (or removed when nothing is left
+     * below them). Evicted chunks stay in the on-disk cache (it is not rewritten).
+     */
+    public void setFullPolicy(FullPolicy p) { this.fullPolicy = java.util.Objects.requireNonNull(p); }
+    public FullPolicy fullPolicy() { return fullPolicy; }
+    public long evictedChunks() { return evicted.get(); }
+
+    /** @return true when there is room for {@code incoming} now */
+    private boolean makeRoomFor(ColumnTile incoming) {
+        synchronized (evictLock) {
+            if (chunks.size() < maxChunks) return true;                       // another writer made room meanwhile
+            int batch = Math.max(1, maxChunks / 64);
+            // the {@code batch} oldest chunks: keep a max-heap of the oldest seen so far (ties broken by key, so the choice is deterministic)
+            java.util.PriorityQueue<Map.Entry<Long, ColumnTile>> heap = new java.util.PriorityQueue<>(batch + 1, (a, b) -> {
+                int c = Long.compare(b.getValue().observedAtMillis(), a.getValue().observedAtMillis());
+                return c != 0 ? c : Long.compare(b.getKey(), a.getKey());
+            });
+            for (Map.Entry<Long, ColumnTile> e : chunks.entrySet()) {
+                heap.add(new java.util.AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
+                if (heap.size() > batch) heap.poll();
+            }
+            long newestVictim = Long.MIN_VALUE, oldest = Long.MAX_VALUE;
+            for (Map.Entry<Long, ColumnTile> e : heap) { newestVictim = Math.max(newestVictim, e.getValue().observedAtMillis()); oldest = Math.min(oldest, e.getValue().observedAtMillis()); }
+            if (incoming.observedAtMillis() < oldest) return false;          // older than everything we would evict: not worth replacing newer data
+            for (Map.Entry<Long, ColumnTile> e : heap) evict(e.getKey());
+            return chunks.size() < maxChunks;
+        }
+    }
+
+    /** Removes one chunk and repairs the version index above it. */
+    private void evict(long k) {
+        ColumnTile gone = chunks.remove(k);
+        if (gone == null) return;
+        columnBytes.addAndGet(-gone.approxHeapBytes());
+        evicted.incrementAndGet();
+        LodKey n = new LodKey(0, (int) (k >> 32), (int) k);
+        versions.remove(n);
+        synchronized (cache) { cache.remove(n); }
         long v = clock.incrementAndGet();
-        ColumnTile prev = chunks.put(k, t);
-        columnBytes.addAndGet(t.approxHeapBytes() - (prev == null ? 0 : prev.approxHeapBytes()));
-        LodKey n = new LodKey(0, t.chunkX(), t.chunkZ());
-        for (int l = 0; l <= maxLod; l++) { versions.merge(n, v, Math::max); if (l < maxLod) n = n.parent(); }
-        return v;
+        for (int l = 1; l <= maxLod; l++) {
+            n = n.parent();
+            boolean anyBelow = false;
+            for (LodKey c : n.children()) if (versions.containsKey(c)) { anyBelow = true; break; }
+            if (anyBelow) versions.merge(n, v, Math::max); else versions.remove(n);   // content changed (one child lost) or nothing left below
+            synchronized (cache) { cache.remove(n); }
+        }
     }
 
     public int chunkCount() { return chunks.size(); }

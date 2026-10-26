@@ -1,6 +1,17 @@
 # HANDOFF — read this first (for the next AI / developer)
 
-## 2026-10-23 (Session 32) honest review, next-phase prompt, two verified test/fix additions (LATEST)
+## 2026-10-24 (Session 33) the next-phase brief executed offline (LATEST)
+
+Plan and ranking: `docs/REVIEW_HONEST.md` (progress table at its end) and `docs/NEXT_PHASE_PROMPT.md` (status header). Pure-Java in the sandbox: core 134, protocol 73, stream 114, `render-gate-test`, `frame-check-test` (12 cases), `compat-lib-test`, `log-scan-test` all pass; 9 Paper/Fabric files syntax-checked only (NOT compiled).
+- **Store policy:** `TerrainStore.FullPolicy.EVICT_OLDEST` (least recently observed chunks leave, re-observation of unchanged content is a touch, a chunk older than everything held is refused, coarse tiles above an evicted chunk are re-versioned or removed). The store default stays `REFUSE_NEW` (`TerrainStoreCapTest` unchanged); the PLUGIN default is `stream.store-full-policy: evict-oldest`. `put` and eviction now exclude each other: the concurrency test found a real NPE race (chunk map written before the version index). Cost (sandbox, cold JIT, synthetic): 32-38 us per admission at the cap, one O(n) scan per cap/64 admissions of up to 65 ms (cap 50k) / 364 ms (cap 300k) on the ingest thread, never the main thread (`docs/evictbench-output.txt`).
+- **Capture cost:** `DrainGovernor` (credit per tick, measured cost charged, capped single charge) replaces "check the clock before each snapshot"; the sweep's chunk listing is charged too. `stream.capture-budget-micros` (default 500, same average as before). Not measured on a real server.
+- **MSPT:** `AwreMspt` (`diagnostics.mspt-seconds`, default 0) logs `[AWRE] mspt: n= p50= p95= p99= max=`; A/B procedure in `docs/MEASUREMENT_PLAN.md`. API-ASSUMPTION: `Server#getTickTimes()`; if the build breaks there, delete the class and its 3 lines in `AwrePlugin`.
+- **Ceiling worlds:** `WorldEligibility` + `stream.skip-ceiling-worlds` (default true): the Nether is neither captured nor streamed (the client already filters by its real dimension). Blacklist-reset on revision change already existed and is tested.
+- **Visible pixels (task 1) partly:** `tools/ci/FrameCheck.java` (AWRE frame vs control frame in the horizon band, noise run, flat-frame guard) and its tests. NOT done: the in-game capture and the CI control run; `api-dump.sh` now also dumps `net.minecraft.client.Screenshot` so the next artifact has the signatures.
+- **Build:** `docs/DEVELOPMENT.md` "Before you push" (`gradlew.bat build -PjavaRelease=21`, `gradlew.bat -p awre-fabric build`); `javaRelease=25` default untouched (requested by the user).
+- **What the user must do:** push; run the two build commands locally first if possible; run the MSPT A/B; send the `mc-api-dump` artifact's `screenshot.javap.txt`, the `Fabric Loom: x.y.z` line and the Paper API build from a build log.
+
+## 2026-10-23 (Session 32) honest review, next-phase prompt, two verified test/fix additions
 
 Read `docs/REVIEW_HONEST.md` (ranked weaknesses, evidence labels) and `docs/NEXT_PHASE_PROMPT.md` (the brief for the next session). Supplied tree `e43858b`; no CI logs for it. Changes: `TileLog.open` now cuts the log at a CRC-valid but undecodable record instead of discarding the whole cache (test fails without the fix: file 2029 B -> 20 B); new adversarial tests `TileLogCorruptionTest`, `HostileServerTest`, `CompressionAbuseTest`. Pure Java in the sandbox: core 118, protocol 73, stream 112, render-gate all pass; Paper/Fabric syntax-checked only. Removed the stale latest-markers from 6 older headings so only this one is marked.
 

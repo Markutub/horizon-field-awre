@@ -35,6 +35,19 @@ gradle :awre-paper:runServer -PjavaRelease=21
 gradle :horizon-paper:runServer -PjavaRelease=21
 ```
 
+## Before you push (the cheapest way to avoid a red CI)
+
+CI compiles with Java 21 (`-PjavaRelease=21`); the repository default is `javaRelease=25` (a deliberate choice, see `gradle.properties`), so a plain `gradlew build` needs a JDK 25 toolchain and produces bytecode that does not run on a Java 21 server. Run the same two commands CI runs (PowerShell or cmd; use `./gradlew` on Linux/macOS):
+
+```
+gradlew.bat build -PjavaRelease=21
+gradlew.bat -p awre-fabric build
+```
+
+The sandbox used by the AI sessions can only syntax-check Paper and Fabric code (`java tools/ParseOnly.java awre-paper/src awre-fabric/src horizon-paper/src`), so real compile errors (wrong Paper/Minecraft method names) only appear here or in CI. If either command fails, send the first `error:` block.
+
+**Pinning (open item):** `fabric-loom` is `1.14-SNAPSHOT` and the Paper API is `1.21.11-R0.1-SNAPSHOT`, both floating. To pin them, send the resolved versions: the first lines of the Fabric build log print `Fabric Loom: <version>`, and `gradlew.bat dependencies --configuration compileClasspath` shows the resolved Paper API build. Nothing is pinned until those exact strings are known (do not guess a version).
+
 ## Integration and client smoke
 
 The CI workflow `.github/workflows/ci.yml` runs pure-Java tests, the root Gradle build, the separate Fabric build, a Fabric client smoke test, and `bash tools/ci/integration.sh jars` with Paper plus a headless Fabric client. It uploads logs and reports. A source snapshot or successful local pure-Java tests are not substitutes for a completed CI run.

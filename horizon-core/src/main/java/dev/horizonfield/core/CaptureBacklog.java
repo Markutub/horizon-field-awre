@@ -78,8 +78,13 @@ public final class CaptureBacklog<K> {
      */
     public int drain(Predicate<K> handler, long budgetNanos, int maxItems) {
         long end = System.nanoTime() + budgetNanos;
+        return drain(handler, () -> System.nanoTime() < end, maxItems);
+    }
+
+    /** Same, but the caller decides before each key whether another may start (for example {@link DrainGovernor#mayStart}). */
+    public int drain(Predicate<K> handler, java.util.function.BooleanSupplier mayStart, int maxItems) {
         int n = 0;
-        while (n < maxItems && System.nanoTime() < end) {
+        while (n < maxItems && mayStart.getAsBoolean()) {
             K k = queue.pollNow();
             if (k == null) break;
             n++;

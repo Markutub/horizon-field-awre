@@ -1,0 +1,2 @@
+cap=50,000: fill 914 ms (18.3 us/put); 25,000 admissions at the cap: 802 ms total = 32.1 us each amortised, worst single admission 64.6 ms, evicted 25,773, held 49,227
+cap=300,000: fill 3632 ms (12.1 us/put); 150,000 admissions at the cap: 5686 ms total = 37.9 us each amortised, worst single admission 363.9 ms, evicted 154,671, held 295,329
