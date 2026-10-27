@@ -37,4 +37,5 @@ limits:
   strike-limit: 5                 # malformed frames before a player's session is ignored until reconnect
 
 diagnostics:
+  report-seconds: 0               # 0 = no timer. 10..86400: append one JSON line of RESULTS (config, MSPT window, counters, per-player stream stats, heap) to plugins/AWRE/reports/awre-report.jsonl every N seconds and once at shutdown. /awre report writes one on demand. Rotated at 8 MiB (one backup). Client-side results are NOT included (the protocol has no client statistics message).
   mspt-seconds: 0                 # 0 = off. > 0: log server MSPT percentiles (p50/p95/p99/max over the last period) every N seconds, independent of stream.enabled. For an A/B: same server, stream.enabled false (baseline) then true. See docs/MEASUREMENT_PLAN.md

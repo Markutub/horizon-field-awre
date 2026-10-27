@@ -52,6 +52,9 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         if (reval < 0 || reval > 86_400) { log.warning("[AWRE] stream.revalidate-seconds must be 0..86400; using 600"); reval = 600; }
         int budget = c.getInt("stream.capture-budget-micros", 500);
         if (budget < 100 || budget > 5000) { log.warning("[AWRE] stream.capture-budget-micros must be 100..5000; using 500"); budget = 500; }
+        for (var f : dev.awre.stream.StreamConfigCheck.findings(stream, captured, synth)) {      // say plainly what this stream setup will actually do
+            if (f.level() == dev.awre.stream.StreamConfigCheck.Level.WARN) log.warning("[AWRE] " + f.text()); else log.info("[AWRE] " + f.text());
+        }
         return new AwreConfig(c.getBoolean("enabled", true), c.getBoolean("auto-send-test-tile", true), c.getBoolean("debug", false), l, side,
                 stream, captured, c.getBoolean("stream.persist", true), c.getBoolean("stream.import-horizon-cache", true), synth, radius, bps, held, ratio, minBytes, reval, budget, c.getBoolean("stream.skip-ceiling-worlds", true));
     }

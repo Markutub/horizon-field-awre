@@ -17,6 +17,8 @@ final class AwreMspt {
     private TimingWindow window = new TimingWindow(8192);
     private int sinceLog;
     private BukkitTask task;
+    private volatile TimingWindow.Summary last;
+    private volatile long lastAt;
 
     AwreMspt(JavaPlugin plugin, int seconds) { this.plugin = plugin; this.periodTicks = Math.max(100, seconds * 20); }
 
@@ -27,6 +29,10 @@ final class AwreMspt {
 
     void stop() { if (task != null) task.cancel(); }
 
+    /** The most recent logged window (null before the first one) and when it was logged; read by AwreReport. */
+    TimingWindow.Summary last() { return last; }
+    long lastAtMillis() { return lastAt; }
+
     private void sample() {
         for (long ns : plugin.getServer().getTickTimes()) window.record(ns);
         sinceLog += 100;
@@ -34,6 +40,7 @@ final class AwreMspt {
             sinceLog = 0;
             TimingWindow.Summary s = window.summary();
             window = new TimingWindow(8192);
+            if (s.total() > 0) { last = s; lastAt = System.currentTimeMillis(); }
             if (s.total() > 0) plugin.getLogger().info("[AWRE] mspt: " + s.format() + " stream=" + plugin.getConfig().getBoolean("stream.enabled"));
         }
     }

@@ -1,0 +1,23 @@
+# PlayerScaleBench output (SYNTHETIC, no thresholds)
+# 2026-10-26, Session 38, Claude sandbox: OpenJDK 21.0.10, 1 CPU (nproc=1), -Xmx3g, default (Serial) GC. Command: bash tools/bench/run-playerscalebench.sh
+# One shared store of 4,096 synthetic chunks; N independent ServerSession/PlayerStreamer/ClientSession; fake clock, 100 ms per step.
+# Columns: N | join CPU ms total (per player) | join steps | steady tick() us p50/p99/max | steady CPU ms per simulated second (all players) | holes | strikes
+# NOT modelled: contention between concurrent jobs and the main thread, real worldgen terrain, a real server heap. N=1 join is JIT-polluted.
+# Three consecutive runs, copied as observed:
+run 1
+1 | 463 (463) | 73 | 108 / 5758 / 7494 | 4.4 | 0 | 0
+4 | 950 (237) | 81 | 68 / 4370 / 14165 | 10.0 | 0 | 0
+16 | 2292 (143) | 81 | 62 / 2115 / 10533 | 23.2 | 0 | 0
+64 | 7763 (121) | 81 | 101 / 1127 / 203364 | 180.8 | 0 | 0
+run 2
+1 | 372 (372) | 73 | 58 / 6821 / 7293 | 3.4 | 0 | 0
+4 | 836 (209) | 81 | 45 / 5157 / 9274 | 11.4 | 0 | 0
+16 | 1958 (122) | 81 | 74 / 3118 / 15604 | 27.4 | 0 | 0
+64 | 8095 (126) | 81 | 82 / 1221 / 134936 | 109.5 | 0 | 0
+run 3
+1 | 674 (674) | 73 | 148 / 6185 / 8618 | 5.4 | 0 | 0
+4 | 902 (226) | 81 | 63 / 3946 / 10321 | 8.6 | 0 | 0
+16 | 2277 (142) | 81 | 72 / 2964 / 13194 | 26.3 | 0 | 0
+64 | 7912 (124) | 81 | 63 / 774 / 122288 | 83.7 | 0 | 0
+# GC check (a 4th run with -Xlog:gc): Full GC pauses of 102.057 ms and 116.154 ms occurred while the heap was still growing; that run's N=64 max tick was 135352 us.
+# Consistent with the N=64 maxima (122-203 ms) being GC pauses, NOT proven (pauses and ticks were not timestamp-aligned).

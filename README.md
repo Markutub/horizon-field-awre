@@ -15,8 +15,7 @@ Server-only Paper plugin research project for **distant terrain on vanilla Minec
 
 ## Build (needs internet + Gradle 9.1+ for Java 25)
 ```bash
-gradle wrapper --gradle-version 9.1.0     # once; no wrapper is bundled
-./gradlew build                            # compiles both modules, runs core tests
+bash gradlew build                         # root wrapper is committed (Gradle 9.6.0; see docs/DEVELOPMENT.md); compiles the root modules, runs tests
 ./gradlew :horizon-paper:runServer         # dev Paper 1.21.11 server (run-paper plugin)
 # Java 21 server instead of 25:
 ./gradlew build -PjavaRelease=21

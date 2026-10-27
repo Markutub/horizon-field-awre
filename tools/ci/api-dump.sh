@@ -42,7 +42,7 @@ dump projection    '^net/minecraft/client/renderer/([a-z]+/)?[A-Za-z0-9_]*(Proje
 dump camera        '^net/minecraft/client/(Camera|Minecraft|Options)\.class$'
 dump rendertypes   '^net/minecraft/client/renderer/(rendertype/)?(RenderType|RenderStateShard|RenderSetup|RenderTypes)[A-Za-z0-9_$]*\.class$'
 # world height accessors (per-dimension min/max build height, to replace the constant skirt floor -64) and the client level
-dump screenshot   '^net/minecraft/client/Screenshot[A-Za-z0-9_$]*\\.class$'      # needed to write the in-game frame capture from real signatures (docs/NEXT_PHASE_PROMPT.md task 1)
+dump screenshot   '^net/minecraft/client/Screenshot[A-Za-z0-9_$]*\.class$'      # needed to write the in-game frame capture from real signatures (docs/NEXT_PHASE_PROMPT.md task 1)
 dump worldheight   '^net/minecraft/(world/level/(LevelHeightAccessor|Level|dimension/DimensionType)|client/multiplayer/ClientLevel)\.class$'
 
 # Vanilla shader SOURCES (assets are usually in the same jar or in a separate client jar): needed to check what core/position_color does

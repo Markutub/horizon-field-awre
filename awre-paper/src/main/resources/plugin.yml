@@ -8,7 +8,7 @@ load: POSTWORLD
 commands:
   awre:
     description: AWRE diagnostics
-    usage: /<command> status|stats|sendtest|fragtest [side]|lodplan [radius]|stream [on|off|status]|sendbad <kind>|debug [on|off]|reload
+    usage: /<command> status|stats|sendtest|fragtest [side]|lodplan [radius]|stream [on|off|status]|sendbad <kind>|debug [on|off]|reload|report
     permission: awre.admin
 permissions:
   awre.admin:

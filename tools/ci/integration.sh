@@ -68,6 +68,9 @@ limits:
   max-in-flight-tiles: 16
   tile-burst: 64
   tile-refill-per-sec: 500
+diagnostics:
+  report-seconds: 30        # result file plugins/AWRE/reports/awre-report.jsonl, validated below and uploaded with the logs
+  mspt-seconds: 30
 YML
 cat > "$SERVER_DIR/server.properties" <<'PROPS'
 online-mode=false
@@ -191,6 +194,40 @@ if [ "$PLAIN_CHECK" = 1 ]; then
   stop_client
 fi
 
+# ---------------------------------------------------------------- opt-in pixel check (REAL framebuffer; docs/NEXT_PHASE_PROMPT.md task 1)
+# Why: every client above runs with --headless, which gives no real framebuffer to judge. PIXEL_CHECK=1 starts ONE client NON-headless under
+# Xvfb with Mesa software GL, waits for the horizon to converge, then tools/ci/pixel-check.sh captures the X display with AWRE drawn, with AWRE
+# paused (-Dawre.test.pauseFile) and once more (noise), and tools/ci/FrameCheck.java decides. PASS/FAIL are real verdicts; "inconclusive"
+# (client never started or converged, hook not honoured) is only INFO unless PIXEL_STRICT=1, because HeadlessMc's non-headless launch under
+# Xvfb has never been run in this project. Needs: xvfb imagemagick(import) mesa-utils x11-utils libgl1-mesa-dri.
+if [ "${PIXEL_CHECK:-0}" = "1" ]; then
+  echo "== pixel check: non-headless client under Xvfb + Mesa software GL"
+  PX_DIR="$OUT/pixel"; mkdir -p "$PX_DIR"; { echo; echo "### Pixel check (opt-in)"; } >> "$OUT/summary.md"
+  if ! command -v Xvfb >/dev/null 2>&1 || ! command -v import >/dev/null 2>&1; then
+    echo "INFO: pixel check skipped: Xvfb and ImageMagick 'import' are required"; echo "- INFO: pixel check skipped (Xvfb or ImageMagick import not installed)" >> "$OUT/summary.md"
+  else
+    PX_DISPLAY=":99"; PX_PAUSE="$PX_DIR/awre-pause.flag"; PX_OPTS="$MODS_DIR/../options.txt"
+    cp "$PX_OPTS" "$PX_DIR/options.txt.orig"
+    printf 'hideGui:true\noverrideWidth:854\noverrideHeight:480\n' >> "$PX_OPTS"       # no HUD; window = the whole 854x480 screen
+    Xvfb "$PX_DISPLAY" -screen 0 854x480x24 +extension GLX +render -noreset > "$PX_DIR/xvfb.log" 2>&1 &
+    XVFB_PID=$!; sleep 3
+    { echo "DISPLAY=$PX_DISPLAY"; DISPLAY="$PX_DISPLAY" glxinfo -B 2>&1 | head -30; DISPLAY="$PX_DISPLAY" xwininfo -root -tree 2>&1 | head -20; } > "$PX_DIR/display-info.txt" 2>&1 || true
+    DISPLAY="$PX_DISPLAY" LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=4.5 MESA_GLSL_VERSION_OVERRIDE=450 \
+      H launch --offline --server localhost:25565 --jvm "-Xmx2G -Dawre.test.pauseFile=$PX_PAUSE" fabric "$MC" > "$OUT/clientP.log" 2>&1 &
+    CLIENT_PID=$!
+    wait_for "$OUT/clientP.log" 'horizon view: held=[0-9]+ candidates=[0-9]+ ready=[1-9][0-9]*' 600 || echo "client P: no meshed tiles seen within timeout (see clientP.log, pixel/display-info.txt)"
+    PAUSE_FILE="$PX_PAUSE" CAPTURE_CMD="import -display $PX_DISPLAY -window root" bash "$(dirname "$GATE")/pixel-check.sh" "$OUT/clientP.log" "$PX_DIR" > "$PX_DIR/pixel-check.out" 2>&1; PX_RC=$?
+    cat "$PX_DIR/pixel-check.out"
+    case "$PX_RC" in
+      0) pass "PIXEL AWRE terrain is visible in a real framebuffer (same-session control, see pixel/*.png)" ;;
+      1) fail "PIXEL AWRE terrain is NOT visible or the scene is unstable: $(grep -m1 'FRAMECHECK' "$PX_DIR/pixel-check.out" | cut -c1-300)" ;;
+      *) if [ "${PIXEL_STRICT:-0}" = "1" ]; then fail "PIXEL inconclusive: $(grep -m1 INCONCLUSIVE "$PX_DIR/pixel-check.out" | cut -c1-300)"; else echo "INFO: pixel check inconclusive (not a verdict about AWRE): $(grep -m1 INCONCLUSIVE "$PX_DIR/pixel-check.out" | cut -c1-300)"; echo "- INFO: pixel check inconclusive: $(grep -m1 INCONCLUSIVE "$PX_DIR/pixel-check.out" | cut -c1-300)" >> "$OUT/summary.md"; fi ;;
+    esac
+    scan "no AWRE-attributable exception in client P log (stack-aware)" awre-exceptions client "$OUT/clientP.log"
+    stop_client; kill "$XVFB_PID" 2>/dev/null; cp "$PX_DIR/options.txt.orig" "$PX_OPTS"
+  fi
+fi
+
 # ---------------------------------------------------------------- opt-in compat clients (informational)
 # COMPAT_MODS="sodium sodium+iris bobby vulkanmod": one client per group with those Modrinth mods added next to AWRE; same synthetic server.
 # Discovery, not a gate: a failure is written to the summary as "COMPAT FAIL" and only fails the job when COMPAT_STRICT=1.
@@ -253,6 +290,12 @@ kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
 scan "no AWRE-attributable exception in server log (stack-aware)" awre-exceptions server "$OUT/server.log"
 noise "$OUT/server.log"
 check "server stopped cleanly (plugin disabled)" "$OUT/server.log" 'AWRE disabled'
+# the server's RESULT file: written every 30 s and once at shutdown (AwreReport); must be well-formed JSON lines that record real streaming
+REPORT_SRC="$SERVER_DIR/plugins/AWRE/reports/awre-report.jsonl"
+if [ -f "$REPORT_SRC" ]; then cp "$REPORT_SRC" "$OUT/awre-report-phase1.jsonl"; else echo "no report file at $REPORT_SRC" > "$OUT/awre-report-phase1.missing.txt"; fi
+RC_OUT=$(bash "$(dirname "$GATE")/report-check.sh" "$OUT/awre-report-phase1.jsonl" --min-lines 2 --last-reason shutdown --require-activity 2>&1); RC_RC=$?
+echo "$RC_OUT"
+if [ "$RC_RC" -eq 0 ]; then pass "server result report is well-formed and records streaming: ${RC_OUT#REPORT-CHECK PASS }"; else fail "server result report: $(head -1 <<<"$RC_OUT" | cut -c1-300)"; fi
 
 # ---------------------------------------------------------------- phase 2: captured (real chunks) + persistence
 echo "== phase 2: captured terrain, fresh disk cache"

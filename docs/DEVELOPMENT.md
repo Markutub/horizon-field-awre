@@ -5,7 +5,7 @@
 - JDK 21 is used by CI and is sufficient for the CI override `-PjavaRelease=21` and the Fabric module.
 - The root build defaults to Java release 25 (`gradle.properties`); use a compatible JDK/Gradle or explicitly set `-PjavaRelease=21`.
 - Internet access is required for Gradle dependency resolution and Minecraft/Paper/Fabric artifacts.
-- The repository snapshot does not include a root Gradle wrapper. CI uses Gradle 9.2.1; the root build comment requires Gradle 9.1+ for release 25.
+- The repository has a root Gradle wrapper (`gradlew`, pinned to Gradle 9.6.0 in `gradle/wrapper/gradle-wrapper.properties`; committed non-executable, so use `bash gradlew ...`). CI installs Gradle 9.2.1 instead and runs `gradle`; the root build requires Gradle 9.1+ for release 25. Whether the wrapper's 9.6.0 resolves has NOT been verified. `awre-fabric` has only a wrapper properties file (9.2.1), no script or jar. Do not run `gradle wrapper ...`: it would overwrite the committed wrapper.
 
 ## Fast pure-Java verification
 
@@ -35,7 +35,26 @@ gradle :awre-paper:runServer -PjavaRelease=21
 gradle :horizon-paper:runServer -PjavaRelease=21
 ```
 
+## Seeing your real world (server config)
+The defaults stream NOTHING useful: `stream.enabled` is false, and `source: synthetic` with `synthetic-chunk-radius: 0` means no terrain at all (only the handshake test tile). For a real world set, in `plugins/AWRE/config.yml`:
+```yaml
+stream:
+  enabled: true
+  source: captured     # real chunks the server has loaded; never generates anything
+  radius: 1000         # blocks; above ~2000 tiles are clipped by the projection far plane (measured)
+```
+then restart, join, and move around so the server loads the area (a pregeneration plugin may also feed it; not verified). Check with `/awre stream` (chunks in memory, `sent`, `held`) and `/awre status` (prints a WARNING when the setup streams nothing). `tilesSent=1` means only the test tile was sent.
+
+## Client options and result reports
+- Client: edit `config/awre-client.txt` in the Minecraft instance (created on first launch). Keys: `render` (auto|on|off), `maxDistance` (64..16384 blocks), `far` (auto|off|blocks), `vanillaRadius` (effective|client), `iris` (auto|assign). A JVM flag such as `-Dawre.render=off` overrides the file. Bad lines are rejected with a warning in the game log (`[AWRE] awre-client.txt line N: ...`) and the default is used. The startup log line `[AWRE] options: ...` shows each value and whether it came from `jvm`, `file` or `default`.
+- Server: set `diagnostics.report-seconds: 60` (and `mspt-seconds: 60` to include MSPT) in `plugins/AWRE/config.yml`, or run `/awre report`. Result lines go to `plugins/AWRE/reports/awre-report.jsonl` (rotated at 8 MiB, one backup `.1`). Validate with `bash tools/ci/report-check.sh <file>`. Offline tests: `bash tools/ci/report-check-test.sh`.
+
+## Pixel check (opt-in, experimental)
+Run the CI workflow manually with `pixel_check` ticked. It installs `xvfb imagemagick mesa-utils x11-utils libgl1-mesa-dri`, starts one non-headless client under software GL and uploads `ci-out/pixel/` (PNG captures, verdict, display info) in the `integration-logs` artifact. Offline tests: `bash tools/ci/pixel-check-test.sh`.
+
 ## Before you push (the cheapest way to avoid a red CI)
+
+Shortcut: `bash tools/feedback.sh` (Git Bash on Windows; `GRADLE_CMD=gradlew.bat` if `bash gradlew` does not work) runs both builds below plus the dependency query, and writes one `feedback-<timestamp>.txt` with the first compile errors, the Loom and Paper API lines needed for pinning, and log tails. Send that file back. Tested only against a mock Gradle; NOT yet run against a real build.
 
 CI compiles with Java 21 (`-PjavaRelease=21`); the repository default is `javaRelease=25` (a deliberate choice, see `gradle.properties`), so a plain `gradlew build` needs a JDK 25 toolchain and produces bytecode that does not run on a Java 21 server. Run the same two commands CI runs (PowerShell or cmd; use `./gradlew` on Linux/macOS):
 

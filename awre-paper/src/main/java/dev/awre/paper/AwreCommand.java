@@ -16,11 +16,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AwreCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBS = List.of("status", "stats", "sendtest", "fragtest", "lodplan", "stream", "sendbad", "debug", "reload");
+    private static final List<String> SUBS = List.of("status", "stats", "sendtest", "fragtest", "lodplan", "stream", "sendbad", "debug", "reload", "report");
     private final JavaPlugin plugin;
     private final AwreChannel channel;
 
+    private AwreReport report;
+
     public AwreCommand(JavaPlugin plugin, AwreChannel channel) { this.plugin = plugin; this.channel = channel; }
+
+    void setReport(AwreReport report) { this.report = report; }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] a) {
@@ -55,6 +59,11 @@ public final class AwreCommand implements CommandExecutor, TabCompleter {
                 boolean on = a.length > 1 ? a[1].equalsIgnoreCase("on") : !channel.debug();
                 channel.setDebug(on);
                 sender.sendMessage("AWRE debug logging " + (on ? "ON" : "OFF"));
+            }
+            case "report" -> {
+                if (report == null) { sender.sendMessage("reports are not available"); return true; }
+                report.writeNow();
+                sender.sendMessage("result snapshot appended to " + report.file().toAbsolutePath() + " (one JSON line; diagnostics.report-seconds in config.yml writes one periodically)");
             }
             case "reload" -> {
                 plugin.reloadConfig();
@@ -120,6 +129,9 @@ public final class AwreCommand implements CommandExecutor, TabCompleter {
 
     private void status(CommandSender sender) {
         sender.sendMessage("AWRE G0+G1 (fragmentation, LOD plan) | enabled=" + channel.config().enabled() + " sessions=" + channel.sessionCount());
+        for (var f : dev.awre.stream.StreamConfigCheck.findings(channel.config().autoStream(), channel.config().streamCaptured(), channel.config().syntheticChunkRadius())) {
+            sender.sendMessage((f.level() == dev.awre.stream.StreamConfigCheck.Level.WARN ? "WARNING: " : "note: ") + f.text());
+        }
         if (!(sender instanceof Player p)) return;
         ServerSession s = channel.session(p);
         sender.sendMessage("client announced channel awre:main via minecraft:register: " + channel.clientListens(p));

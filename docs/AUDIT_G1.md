@@ -1,6 +1,6 @@
 # AWRE G1 audit (Session 26): defects, fixes, evidence
 
-## 2026-10-22 (Session 27) evidence addendum (LATEST)
+## 2026-10-22 (Session 27) evidence addendum
 
 The statements above remain as written at audit time ("Gradle/Fabric/CI/in-game NOT RUN" was true then). Evidence since:
 

@@ -40,3 +40,17 @@ Setup (write it down with every result): hardware (CPU model, cores, RAM), Java 
 Send back, per run: all `[AWRE] mspt:` lines, the last `/awre stats` output (it contains `capture: ... snapshot[...] tick[...] ... storeRejected= storeEvicted=`), and the `[AWRE] terrain store cap` and `compacted` lines. Compare `mspt` p50/p95/p99/max of B, C, D against A; the difference is AWRE's cost (the tick time includes everything on the main thread, not only this plugin).
 
 Reading the result: the capture budget (average 0.5 ms per tick = 1% of a 50 ms tick) is bounded by `DrainGovernor` in source and tests; what the A/B shows is the real cost on top of it (snapshots are heavier than their measured p50, the sweep's `getLoadedChunks()` listing, event handlers, the 100 ms planner replan on the main thread, `channel.send`). If B-A at p99 exceeds about 2 ms, lower `stream.capture-budget-micros` (100..5000) first and re-run; do not raise it.
+
+## N-player streaming cost (Session 38; SYNTHETIC, sandbox, single machine)
+
+Command: `bash tools/bench/run-playerscalebench.sh`; raw output in `docs/playerscalebench-output.txt` (3 runs). 4,096 synthetic chunks, real `PlayerStreamer`/sessions, 1 CPU, Serial GC. Three runs agree on the following (VERIFIED, synthetic):
+- **Join:** about 120-240 ms of `tick()` CPU per player to a complete horizon (N=1 row is JIT-polluted: 372-674 ms). It scales roughly linearly: 64 simultaneous joins cost 7.8-8.1 s of CPU in total, which the plugin runs as 64 async jobs.
+- **Steady (walking 0.6 blocks per 100 ms step):** `tick()` p50 45-148 us for every N. p99 is 2-7 ms for N<=16 (replanning/bursts) and 0.8-1.2 ms at N=64. Total streaming CPU per simulated second: 3-11 ms (N<=4), 23-27 ms (N=16), 84-181 ms (N=64).
+- No holes and no strikes at any N.
+- The N=64 single-call maxima (122-203 ms) coincide in size with Full GC pauses seen in a logged run (102 and 116 ms); consistent with GC, not proven.
+
+**Decision for NEXT_PHASE_PROMPT task 2.3: no concurrency limit added.** Nothing here shows streaming CPU being a problem up to 64 players; the rule was "do not add a limit without data". **NOT MEASURED:** the real risk, which this sequential bench cannot show: N async jobs competing with the main thread for cores on a real 2-4 core server (e.g. a burst of joins). Measure it with the MSPT A/B above while N bots join at once; if MSPT p99 rises, bound the async pool then.
+
+## Recording the A/B (Session 38)
+
+Instead of copying `[AWRE] mspt:` lines out of the console, set `diagnostics.report-seconds: 60` and `diagnostics.mspt-seconds: 60` for both runs (baseline `stream.enabled: false`, then `true`). Each report line carries `config.streamEnabled`, the last MSPT window in milliseconds (`mspt.p50Ms/p95Ms/p99Ms/maxMs`, `mspt.ageSeconds`), `heapUsedMiB`, the counters and per-player stream stats, so the two runs can be compared from `plugins/AWRE/reports/awre-report.jsonl` alone. The reporting itself costs one small map build on the main thread per period and the file write runs off-thread; that cost is NOT measured.

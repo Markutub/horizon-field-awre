@@ -17,8 +17,8 @@ import org.slf4j.LoggerFactory;
  * {@link ClientRuntime}; this class only wires Fabric events, the payload channel and {@link HorizonRenderer}. A port to another
  * Minecraft generation rewrites this file and HorizonRenderer, nothing else.
  *
- * <p>JVM properties: {@code -Dawre.render=auto|on|off} (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
- * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|assign} (auto = detect only; assign = EXPERIMENTAL: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.vanilla.radius=effective|client} (which render distance counts as vanilla's; client = raw option, for Bobby-like mods), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests).
+ * <p>JVM properties: {@code -Dawre.render=auto|on|off} (every option below can also be set in config/awre-client.txt; the -D flag wins) (auto = off only when another distant-terrain LOD mod, Distant Horizons or Voxy, is loaded),
+ * {@code -Dawre.view.maxDistance=16384}, {@code -Dawre.iris=auto|assign} (auto = detect only; assign = EXPERIMENTAL: ask Iris to shade AWRE terrain with the pack's terrain program), {@code -Dawre.vanilla.radius=effective|client} (which render distance counts as vanilla's; client = raw option, for Bobby-like mods), {@code -Dawre.far=auto|off|<blocks>} (far plane of the AWRE pass; off = vanilla's projection), {@code -Dawre.test.minVersion/maxVersion} (forces an incompatible client for tests), {@code -Dawre.test.pauseFile=<path>} (CI pixel check: AWRE terrain is not drawn while the file exists).
  */
 public final class AwreClientMod implements ClientModInitializer {
     static final Logger LOG = LoggerFactory.getLogger("AWRE");
@@ -28,8 +28,11 @@ public final class AwreClientMod implements ClientModInitializer {
     private ClientRuntime<HorizonRenderer.GpuMesh> runtime;
     private dev.awre.stream.compat.ShaderPackBridge shaderBridge = dev.awre.stream.compat.ShaderPackBridge.NONE;
     private boolean lastShaderActive;
-    private final dev.awre.stream.compat.VanillaRadius.Mode vanillaRadiusMode = dev.awre.stream.compat.VanillaRadius.Mode.parse(System.getProperty("awre.vanilla.radius", "effective"));
+    private dev.awre.stream.compat.VanillaRadius.Mode vanillaRadiusMode = dev.awre.stream.compat.VanillaRadius.Mode.EFFECTIVE;   // set from the options right after the file is loaded
     private float lastDepthFar = -1;
+    /** CI pixel check only (-Dawre.test.pauseFile=<path>): while that file exists AWRE terrain is not drawn, giving a control frame from the same session. Inert without the property. */
+    private final dev.awre.stream.RenderPause testPause = dev.awre.stream.RenderPause.fromProperty(System.getProperty("awre.test.pauseFile"));
+    private boolean lastTestPaused;
     private int lastEffectiveRd = -1;
 
     @Override
@@ -37,7 +40,9 @@ public final class AwreClientMod implements ClientModInitializer {
         PayloadTypeRegistry.playS2C().register(AwrePayload.TYPE, AwrePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(AwrePayload.TYPE, AwrePayload.CODEC);
 
-        var decision = dev.awre.stream.compat.RenderPolicy.decide(dev.awre.stream.compat.RenderPolicy.Mode.parse(System.getProperty("awre.render", "auto")),
+        loadClientOptions();                                                      // config/awre-client.txt (created with every option documented if missing); a -D flag still wins
+        vanillaRadiusMode = dev.awre.stream.compat.VanillaRadius.Mode.parse(dev.awre.stream.ClientOptions.get("awre.vanilla.radius", "effective"));
+        var decision = dev.awre.stream.compat.RenderPolicy.decide(dev.awre.stream.compat.RenderPolicy.Mode.parse(dev.awre.stream.ClientOptions.get("awre.render", "auto")),
                 id -> FabricLoader.getInstance().isModLoaded(id));
         decision.notes().forEach(LOG::info);
         if (vanillaRadiusMode == dev.awre.stream.compat.VanillaRadius.Mode.CLIENT) LOG.info("[AWRE] awre.vanilla.radius=client: the raw client render distance is treated as vanilla's");
@@ -46,10 +51,10 @@ public final class AwreClientMod implements ClientModInitializer {
         loadBiomeOverrides();
         loadRevealSettings();
         shaderBridge = FabricLoader.getInstance().isModLoaded("iris") ? IrisBridge.create() : dev.awre.stream.compat.ShaderPackBridge.NONE;
-        renderer.setShaderBridge(shaderBridge, "assign".equalsIgnoreCase(System.getProperty("awre.iris", "auto")));
+        renderer.setShaderBridge(shaderBridge, "assign".equalsIgnoreCase(dev.awre.stream.ClientOptions.get("awre.iris", "auto")));
 
-        double maxDistance = Double.parseDouble(System.getProperty("awre.view.maxDistance", "16384"));
-        renderer.configureFar(System.getProperty("awre.far", "auto"), maxDistance);
+        double maxDistance = Double.parseDouble(dev.awre.stream.ClientOptions.get("awre.view.maxDistance", "16384"));
+        renderer.configureFar(dev.awre.stream.ClientOptions.get("awre.far", "auto"), maxDistance);
         runtime = new ClientRuntime<>(new ClientRuntime.Host() {
             @Override public void send(byte[] frame) { AwreClientMod.this.send(frame); }
             @Override public void info(String m) { LOG.info(m); }
@@ -91,12 +96,36 @@ public final class AwreClientMod implements ClientModInitializer {
         // positionMatrix(). The view matrix is built from the camera rotation (world -> view, no translation: the translation is the
         // per-draw offset). API-ASSUMPTION still open: Camera#rotation() returning a joml Quaternionf.
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_MAIN.register(ctx -> {
+            boolean paused = testPause.paused();
+            if (paused != lastTestPaused) { lastTestPaused = paused; LOG.info("[AWRE] test render pause {}", paused ? "ON (AWRE terrain not drawn)" : "OFF"); }
+            if (paused) return;
             var camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
             var cam = camera.position();
             var view = new org.joml.Matrix4f().rotation(camera.rotation().conjugate(new org.joml.Quaternionf()));
             renderer.render(view, cam.x, cam.y, cam.z);
         });
         LOG.info("[AWRE] client G0 loaded; protocol v{}..v{}, channel {}", Awre.PROTOCOL_MIN, Awre.PROTOCOL_MAX, Awre.CHANNEL);
+    }
+
+    /**
+     * config/awre-client.txt: the main options (render, maxDistance, far, vanillaRadius, iris) as a file; a -D JVM flag still overrides it. When the
+     * file does not exist a fully commented template is written so the options are discoverable. Invalid lines are rejected with a warning.
+     */
+    private static void loadClientOptions() {
+        java.nio.file.Path f = FabricLoader.getInstance().getConfigDir().resolve("awre-client.txt");
+        try {
+            if (!java.nio.file.Files.isRegularFile(f)) {
+                java.nio.file.Files.writeString(f, dev.awre.stream.ClientOptions.example(), java.nio.charset.StandardCharsets.UTF_8);
+                LOG.info("[AWRE] created {} with every option documented (all commented out = defaults)", f.getFileName());
+            } else {
+                var p = dev.awre.stream.ClientOptions.parse(java.nio.file.Files.readAllLines(f, java.nio.charset.StandardCharsets.UTF_8));
+                dev.awre.stream.ClientOptions.setFileValues(p.values());
+                for (String r : p.rejected()) LOG.warn("[AWRE] awre-client.txt {}", r);
+            }
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("[AWRE] could not read or create {}: {}; using defaults and -D flags", f.getFileName(), e.toString());
+        }
+        LOG.info("[AWRE] options: {}", dev.awre.stream.ClientOptions.describe());
     }
 
     /** config/awre-colors.txt: "namespace:block = #RRGGBB" rules for blocks the built-in colour table does not know (see ColorOverrides). */

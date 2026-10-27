@@ -1,0 +1,6 @@
+# Normalize line endings: shell scripts break on CRLF under Linux/CI.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.jar binary
+*.png binary

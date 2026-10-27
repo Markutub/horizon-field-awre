@@ -1,5 +1,7 @@
 # AI_CONTEXT — Horizon Field / AWRE
 
+> Current state (Session 38): see `CLAUDE.md`, `docs/STATUS.md`, `docs/HANDOFF.md`. The header and per-session notes below are history and partly stale; run `bash tools/check.sh` for the current offline baseline.
+
 Last verified: 2026-10-24 (Session 33) on git HEAD e43858b plus the Session 32-33 edits; pure-Java: core 134 / protocol 73 / stream 114 and the four tools/ci script tests pass; Paper/Fabric code syntax-checked only; Gradle/CI/in-game NOT run this session. Evidence and open items: `docs/HANDOFF.md`, `docs/REVIEW_HONEST.md`.
 
 ## Purpose and current phase

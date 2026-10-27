@@ -18,6 +18,10 @@ on:
         description: "Client renderDistance for the integration job (default 12 = Minecraft default; server view-distance is 4)"
         type: string
         default: ""
+      pixel_check:
+        description: "Opt-in: run one NON-headless client under Xvfb + Mesa software GL and prove from real framebuffer captures (AWRE on vs same-session control) that terrain is visible. Adds a client start; inconclusive results are informational"
+        type: boolean
+        default: false
       compat_mods:
         description: "Opt-in compat clients, one per group, e.g. 'sodium sodium+iris bobby vulkanmod' ('+' joins mods that load together). Informational: results go to the summary, a failure does not fail the job"
         type: string
@@ -43,6 +47,10 @@ jobs:
       - run: bash tools/ci/render-gate-test.sh
       - run: bash tools/ci/frame-check-test.sh
       - run: bash tools/ci/compat-lib-test.sh
+      - run: bash tools/ci/report-check-test.sh       # the server result-report validator, incl. every case that must fail
+      - run: bash tools/ci/pixel-check-test.sh        # real-framebuffer proof orchestration, against a mock display and client
+      - run: bash tools/ci/api-dump-regex-test.sh     # every api-dump class regex must match the class it dumps
+      - run: bash tools/feedback-test.sh              # feedback.sh against a mock Gradle
       - run: bash tools/ci/log-scan-test.sh          # stack-aware exception scan, convergence and noise classification, against real log excerpts
       - name: Reference frames (CPU geometry check of the real LOD plan + meshes; not an in-game render)
         run: bash tools/preview/run-reference-frame.sh reference-frames
@@ -140,8 +148,12 @@ jobs:
           chmod +x "$HOME/bin/headlessmc"
           echo "$HOME/bin" >> "$GITHUB_PATH"
           "$HOME/bin/headlessmc" --version
+      - name: Install display stack for the pixel check (opt-in)
+        if: ${{ inputs.pixel_check }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb imagemagick mesa-utils x11-utils libgl1-mesa-dri
       - name: Run integration (see tools/ci/integration.sh for the exact checks)
         env:
+          PIXEL_CHECK: ${{ inputs.pixel_check && '1' || '0' }}     # opt-in via workflow_dispatch; see tools/ci/pixel-check.sh
           RENDER_SMOKE: ${{ inputs.render_smoke && '1' || '0' }}   # opt-in via workflow_dispatch; render counters are mandatory only when 1
           CLIENT_RENDER_DISTANCE: ${{ inputs.client_render_distance }}      # empty = harness default (12)
           COMPAT_MODS: ${{ inputs.compat_mods }}                   # opt-in via workflow_dispatch; empty = no compat clients

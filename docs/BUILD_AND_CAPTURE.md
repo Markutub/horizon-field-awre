@@ -4,11 +4,10 @@
 (offline report + `docs/TECHNIQUE_MAP.md` §4c). So `horizon-paper` compiles and runs for that build. NOT verified by the author: which exact Paper build/Java ran it, whether the source was edited to compile (if so, the zip no longer matches the jar), Java 25 build, multi-player behaviour.
 
 ## 1. Build
-Prereqs: JDK 25 (default) or JDK 21 (add `-PjavaRelease=21`), Gradle 9.1+ installed once to create the wrapper, internet.
+Prereqs: JDK 25 (default) or JDK 21 (add `-PjavaRelease=21`), internet (the committed root wrapper downloads Gradle; see docs/DEVELOPMENT.md).
 ```bash
 cd horizon-field
-gradle wrapper --gradle-version 9.1.0
-./gradlew build                      # JDK 25
+./gradlew build                      # JDK 25 (use `bash gradlew` if the executable bit is missing)
 ./gradlew build -PjavaRelease=21     # JDK 21
 ```
 Expected output: `horizon-paper/build/libs/HorizonField-0.1.0.jar`; core tests pass (27 in the authoring sandbox via `tools/verify-core.sh`).
