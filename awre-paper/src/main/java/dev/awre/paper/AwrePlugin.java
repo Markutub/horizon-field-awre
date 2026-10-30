@@ -15,6 +15,8 @@ public final class AwrePlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         AwreConfig cfg = AwreConfig.load(getConfig(), getLogger());
+        getLogger().info("config file " + new java.io.File(getDataFolder(), "config.yml").getAbsolutePath() + " -> stream.enabled=" + cfg.autoStream()
+                + " source=" + (cfg.streamCaptured() ? "captured" : "synthetic") + " synthetic-chunk-radius=" + cfg.syntheticChunkRadius() + " radius=" + cfg.streamRadius());
         channel = new AwreChannel(this, cfg);
         channel.register();
         streaming = new AwreStreaming(this, channel);

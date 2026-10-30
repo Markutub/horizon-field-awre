@@ -31,6 +31,7 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         }
         int side = c.getInt("auto-fragment-test-side", 0);
         if (side != 0 && (side < 16 || side > 256)) { log.warning("[AWRE] auto-fragment-test-side must be 0 or 16..256; disabled"); side = 0; }
+        if (!c.isConfigurationSection("stream")) log.warning("config.yml has no 'stream:' section with settings under it (an empty or unindented 'stream:' block reads as empty): every stream setting is at its default, including stream.enabled=false. Indent the stream settings by two spaces under 'stream:'.");
         boolean stream = c.getBoolean("stream.enabled", false);
         String source = c.getString("stream.source", "synthetic");
         boolean captured = "captured".equalsIgnoreCase(source);
@@ -53,7 +54,7 @@ public record AwreConfig(boolean enabled, boolean autoSendTestTile, boolean debu
         int budget = c.getInt("stream.capture-budget-micros", 500);
         if (budget < 100 || budget > 5000) { log.warning("[AWRE] stream.capture-budget-micros must be 100..5000; using 500"); budget = 500; }
         for (var f : dev.awre.stream.StreamConfigCheck.findings(stream, captured, synth)) {      // say plainly what this stream setup will actually do
-            if (f.level() == dev.awre.stream.StreamConfigCheck.Level.WARN) log.warning("[AWRE] " + f.text()); else log.info("[AWRE] " + f.text());
+            if (f.level() == dev.awre.stream.StreamConfigCheck.Level.WARN) log.warning(f.text()); else log.info(f.text());      // the plugin logger already adds the [AWRE] prefix
         }
         return new AwreConfig(c.getBoolean("enabled", true), c.getBoolean("auto-send-test-tile", true), c.getBoolean("debug", false), l, side,
                 stream, captured, c.getBoolean("stream.persist", true), c.getBoolean("stream.import-horizon-cache", true), synth, radius, bps, held, ratio, minBytes, reval, budget, c.getBoolean("stream.skip-ceiling-worlds", true));

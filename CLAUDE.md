@@ -88,5 +88,5 @@ Paper/Fabric code edited without level 2 is **compile-unverified**: say so, and 
 - Pinning Loom and Paper API versions needs the resolved version strings from a real build log.
 
 ## Where to read more
-`docs/STATUS.md` (newest first) -> `docs/architecture/OVERVIEW.md`, `DECISIONS.md` -> `docs/PROTOCOL.md`/`AWRE_PROTOCOL.md` ->
+`docs/TROUBLESHOOTING.md` (symptom -> meaning -> fix, from a real test), `docs/MANUAL_TEST_CHECKLIST.md`, `docs/STATUS.md` (newest first) -> `docs/architecture/OVERVIEW.md`, `DECISIONS.md` -> `docs/PROTOCOL.md`/`AWRE_PROTOCOL.md` ->
 `docs/MANUAL_TEST_PLAN.md` -> `docs/COMPAT_PLAN.md`, `docs/REVEAL_EFFECT.md`, `docs/REVIEW_HONEST.md`.

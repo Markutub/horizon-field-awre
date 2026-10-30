@@ -129,6 +129,9 @@ public final class AwreCommand implements CommandExecutor, TabCompleter {
 
     private void status(CommandSender sender) {
         sender.sendMessage("AWRE G0+G1 (fragmentation, LOD plan) | enabled=" + channel.config().enabled() + " sessions=" + channel.sessionCount());
+        // 'enabled=' above is the plugin's master switch, NOT terrain streaming: say the stream setting explicitly
+        sender.sendMessage("stream: enabled=" + channel.config().autoStream() + " source=" + (channel.config().streamCaptured() ? "captured" : "synthetic")
+                + " synthetic-chunk-radius=" + channel.config().syntheticChunkRadius() + " radius=" + channel.config().streamRadius() + " (terrain is streamed only when stream.enabled=true and there is terrain to send)");
         for (var f : dev.awre.stream.StreamConfigCheck.findings(channel.config().autoStream(), channel.config().streamCaptured(), channel.config().syntheticChunkRadius())) {
             sender.sendMessage((f.level() == dev.awre.stream.StreamConfigCheck.Level.WARN ? "WARNING: " : "note: ") + f.text());
         }
